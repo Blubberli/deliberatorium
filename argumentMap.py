@@ -25,8 +25,12 @@ class ArgumentMap:
 
     def load_json(self, json_file):
         """Loads the json object from the json file"""
-        with open(json_file) as f:
-            json_obj = json.load(f)
+        try:
+            with open(json_file, encoding='utf-8') as f:
+                json_obj = json.load(f)
+        except json.decoder.JSONDecodeError:
+            with open(json_file, encoding='utf-8-sig') as f:
+                json_obj = json.load(f)
         return json_obj
 
     def init_children(self):
