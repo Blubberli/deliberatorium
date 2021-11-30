@@ -20,6 +20,7 @@ class ChildNode:
         self._creator = node_dict["creator"]
         self._events = self.init_events(node_dict["events"])
         self._direct_children = self.init_direct_children(node_dict)
+        self._has_embedding = False
 
     def init_direct_children(self, node_dict):
         """Initialize all direct child nodes"""
@@ -47,6 +48,11 @@ class ChildNode:
         if not self._direct_children:
             return True
         return False
+
+    def add_embedding(self, embedding):
+        """adds an embedding representation for this node, sets flag to true"""
+        self._embedding = embedding
+        self._has_embedding = True
 
     def __str__(self):
         return str(self._name)
