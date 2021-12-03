@@ -20,8 +20,12 @@ class ArgumentMap:
         self._name = self._jsonObj["name"]
         self._description = self._jsonObj["description"]
         self._type = self._jsonObj["type"]
-        self._all_children = self.init_children()
-        self._events = None
+        self._direct_children = self.init_children()
+        all_children = []
+        # create a list that stores all nodes of a map by iterating through the first level of nodes and calling the recursive method for each child.
+        for child in self._direct_children:
+            all_children = self.get_all_children(node=child, child_list=all_children)
+        self._all_children = all_children
 
     def load_json(self, json_file):
         """Loads the json object from the json file"""
@@ -33,40 +37,27 @@ class ArgumentMap:
                 json_obj = json.load(f)
         return json_obj
 
+    def get_all_children(self, node, child_list):
+        """recursively iterate trough all nodes of a map and append the children and their children..."""
+        child_list.append(node)
+        if node._is_leaf:
+            return child_list
+        else:
+            for childnode in node._direct_children:
+                self.get_all_children(childnode, child_list)
+        return child_list
+
     def init_children(self):
-        """Retrieves all nodes from the argument map. Creates a list based on the retrieved node list that contains the nodes as Child Objects"""
-        all_children = []
+        """Initializes the first level of children = all nodes that are directly located at the root of the map"""
         children_list = []
         if self._jsonObj["children"]:
-            all_children = ArgumentMap.get_children([], self._jsonObj["children"])
-        for c in all_children:
-            children_list.append(ChildNode(c))
+            for child in self._jsonObj["children"]:
+                children_list.append(ChildNode(child))
         return children_list
 
     def number_of_children(self):
         """Returns the number of child nodes in the map"""
         return len(self._all_children)
-
-    @staticmethod
-    def get_children(all_children, node):
-        """Recursive method: recursively travers through a node and its' children.
-        Append all children to a list as a tuple together with the corresponding parent node.
-        List grows incrementally"""
-        if type(node) == dict:
-            if not "children" in node:
-                return all_children
-            elif node["children"] == None:
-                return all_children
-            else:
-                for child in node["children"]:
-                    all_children.append(child)
-                    ArgumentMap.get_children(all_children, child)
-            # if the child is a list of children do recursion for every child
-        else:
-            for child in node:
-                all_children.append(child)
-                ArgumentMap.get_children(all_children, child)
-        return all_children
 
     def __str__(self):
         return str(self._name)

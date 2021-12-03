@@ -40,31 +40,41 @@ class MapEncoder:
             device = "cpu"
         return device
 
-    def encode_argument_map(self, path):
+    def encode_argument_map(self, argument_map):
         """
         loads an argument map from a path. adds the sbert embedding representation to each node.
         :param path: [str] the location of the argument map to be encoded
         :return: a dictionary with embddings, corresponding sentences and corresponding IDs
         """
-        argument_map = ArgumentMap(path)
         nodes = argument_map._all_children
         sentences = [node._name for node in nodes]
         descriptions = [node._description for node in nodes]
         unique_ids = [node._id for node in nodes]
         if self._use_descriptions:
-            sentences = [sentences[i] + " : " + descriptions[i] if descriptions[i] != '' else sentences[i] for i in
-                         range(len(sentences))]
+            sentences = [
+                sentences[i] + " : " + descriptions[i] if (descriptions[i] != '' and descriptions[i] != None) else
+                sentences[i] for i in
+                range(len(sentences))]
         embeddings = self._sbertModel.encode(sentences, show_progress_bar=True,
                                              normalize_embeddings=self._normalize_embeddings)
         for i in range(len(nodes)):
             nodes[i].add_embedding(embeddings[i])
         return {"embeddings": embeddings, "sentences": sentences, "ID": unique_ids}
 
+    def add_stored_embeddings(self, argument_map, path_to_pckl):
+        """Given a path of pregenerated embeddings, add"""
+        data = self.load_embeddings(path_to_pckl=path_to_pckl)
+        nodes = argument_map._all_children
+        for node in nodes:
+            id = node._id
+            embedding = data[id]
+            node.add_embedding(embedding)
+
     @staticmethod
-    def save_embeddings(path_to_pckl, sentences, embeddings, unique_id):
+    def save_embeddings(path_to_pckl, embeddings, unique_id):
         """store dictionary with embeddings, ids and sentences to a pickle object"""
         with open(path_to_pckl, "wb") as fOut:
-            pickle.dump({'sentences': sentences, 'embeddings': embeddings, 'ID': unique_id}, fOut,
+            pickle.dump(dict(zip(unique_id, embeddings)), fOut,
                         protocol=pickle.HIGHEST_PROTOCOL)
 
     @staticmethod
@@ -72,7 +82,8 @@ class MapEncoder:
         """load dictionary with sentences, embeddings and IDs from a pickle object"""
         with open(path_to_pckl, "rb") as fIn:
             stored_data = pickle.load(fIn)
-            stored_sentences = stored_data['sentences']
-            stored_embeddings = stored_data['embeddings']
-            stored_ids = stored_data["ID"]
-        return {"sentences": stored_sentences, "embeddings": stored_embeddings, "ID": stored_ids}
+            # stored_sentences = stored_data['sentences']
+            # stored_embeddings = stored_data['embeddings']
+            # stored_ids = stored_data["ID"]
+        return stored_data
+        # return {"sentences": stored_sentences, "embeddings": stored_embeddings, "ID": stored_ids, "ID2EMBEDDINGS":}
