@@ -1,32 +1,31 @@
-from argumentMap import ArgumentMap
-from encode_nodes import MapEncoder
 import numpy as np
-import os
-import random
-
-random.seed(42)
 
 
 class Evaluation:
 
-    def __init__(self, argument_map, number_of_candidates=0, node_type=None, restrict_parent_types=False):
+    def __init__(self, argument_map, only_parents=False, only_leafs=False, child_node_type=None,
+                 candidate_node_types=None):
+        """
+        Computes the number of times a rank is equal or lower to a given rank.
+        :param argument_map [ArgumentMap]: an ArgumentMap object with initialized embedding nodes (embeddings have to normalized!)
+        :param only_parents [bool]: if true, only parents of child nodes to be evaluated are considered as candidates
+        :param only_leafs [bool]: if true, only child nodes that are leafs, i.e. have no children are considered for evaluation
+        :param child_node_type [str]: if specified, only child nodes of a given type are considered for evaluation
+        :param candidate_node_types [set]: if given, has to be given as a set: only nodes with the speicified node types
+        are considered as candidates
+        """
         # argument map with encoded nodes
         self._argument_map = argument_map
-        # the nodes that are possible candidates to attach the child to
-        self._all_candidates = self._argument_map._all_children
-        print(len(self._all_candidates))
-        # the children to be attached and their correct parents
-        self._child_nodes, self._parent_nodes = self.extract_child_and_parent_nodes(node_type)
-        if restrict_parent_types:
-            # filter out children that have pro or con as parent, these are also not considered as possible candidates
-            self._child_nodes, self._parent_nodes, self._all_candidates = self.filter_candidates_for_node_type()
-        if number_of_candidates > 0:
-            # downsample the number of possible nodes consideres as candidates (e.g. in oder to compare datasets of different sizes)
-            self._child_nodes, self._parent_nodes, self._all_candidates = self.filter_candidates_by_number(
-                number_of_candidates)
-        print(len(self._child_nodes))
-        print(len(self._parent_nodes))
-        print(len(self._all_candidates))
+        # gather all nodes in the map and construct a node2index and an embedding matrix
+        self._all_nodes = self._argument_map._all_children
+        self._node2id, self._embedding_matrix = self.get_embedding_matrix()
+        # extract the nodes to be tested
+        self._child_nodes = self.get_child_nodes(only_leafs, child_node_type, candidate_node_types)
+        # extract their corresponding parents
+        self._parent_nodes = [child._parent for child in self._child_nodes]
+        # extract possible candidate (all parents must be within the candidates)
+        self._candidate_nodes = self.get_candidate_nodes(only_parents, candidate_node_types)
+
         assert len(self._child_nodes) == len(
             self._parent_nodes), "the number of children and their parents is not the same"
         self._ranks = self.compute_ranks()
@@ -42,90 +41,56 @@ class Evaluation:
         :return:
         """
         ranks = []
-        node_matrix, self._node2id = self.get_embedding_matrix()
+        # compute all possible pairwise similarities
+        node2node_similarity = np.dot(self._embedding_matrix, np.transpose(self._embedding_matrix))
+        # extract child IDs
         child_idxs = [self._node2id[node] for node in self._child_nodes]
-        candidate_idxs = [self._node2id[node] for node in self._all_candidates]
-        # gather all embeddings for my children
-        child_repr = np.take(node_matrix, child_idxs, axis=0)
-        # gather all embeddings for candidates
-        candidate_repr = np.take(node_matrix, candidate_idxs, axis=0)
-        # each row contains a similarity between each child and every possible candidate
-        # [candidate_size, children_size]
-        candidate2children_similarities = np.dot(candidate_repr, np.transpose(child_repr))
-        print(candidate2children_similarities.shape)
-        print(candidate2children_similarities)
+        # extract candidate IDs
+        candidate_idxs = [self._node2id[node] for node in self._candidate_nodes]
+        # gather similarities for each child to each of the possible candidate nodes and store them in a new matrix
+        target_similarity_matrix = np.zeros(shape=[len(candidate_idxs), len(child_idxs)])
+        for i in range(len(candidate_idxs)):
+            for j in range(len(child_idxs)):
+                target_similarity_matrix[i, j] = node2node_similarity[candidate_idxs[i], child_idxs[j]]
+
         for i in range(len(self._child_nodes)):
             # compute the similarity between child and correct parent
             child2parent_similarity = np.dot(self._child_nodes[i]._embedding, self._parent_nodes[i]._embedding)
-            # delete the similarity between the child node and itself
-            target_sims = np.delete(candidate2children_similarities[:, i], child_idxs[i])
-            # the rank is the number of vectors with greater similarity that the one between
-            # the target representation and the composed one; no sorting is required, just
+            # the rank is the number of embeddings with greater similarity than the one between
+            # the child representation and the parent; no sorting is required, just
             # the number of elements that are more similar
-            rank = np.count_nonzero(target_sims > child2parent_similarity) + 1
+            target_sims = target_similarity_matrix[:, i]
+            # the highest ranked item will always be the child itself, this is not considered (has rank "0")
+            rank = np.count_nonzero(target_sims > child2parent_similarity)
             ranks.append(rank)
         return ranks
 
-    def filter_candidates_by_number(self, n):
-        """
-        This method can be used to only use a n-size sample as a pool of possible candidates for the ranking. the pool
-        will contain the gold parents. if the number of gold parents is too high, the pool will consist an n-sized sample
-        of the parents and the children nodes will be reduces correspondingly. If the number of parents is smaller than n
-        additional candidates are sampled from all possible nodes of a map
-        :param n:
-        :return: the (eventually filtered) list of children, the corresponding parents and the candidates to use for ranking
-        """
-        assert n <= len(
-            self._all_candidates), "your sample size is higher than the number of possible nodes in this map"
-        if len(set(self._parent_nodes)) > n:
-            # store the reduced number of children and parents
-            new_children = []
-            new_parents = []
-            sampled_parents = random.sample(self._child_nodes, n)
-            for i in range(len(self._child_nodes)):
-                if self._parent_nodes[i] in set(sampled_parents):
-                    new_children.append(self._child_nodes[i])
-                    new_parents.append(self._parent_nodes[i])
-            # possible candidates are the reduced number of possible parents
-            all_candidates = new_parents
-        else:
-            # take the parents and sample the missing number until n from all candidates
-            non_parents = list(set(self._all_candidates).difference(set(self._parent_nodes)))
-            additional_candidates = random.sample(non_parents, n - len(set(self._parent_nodes)))
-            # possible candidates are parents and an additional random sample
-            all_candidates = additional_candidates + self._parent_nodes
-            new_children = self._child_nodes
-            new_parents = self._parent_nodes
-        return new_children, new_parents, all_candidates
+    def get_child_nodes(self, only_leafs, child_node_type, candidate_node_types):
+        """Extract the child nodes to be used for evaluation. Apply filtering rules if specified."""
+        # case 1: I want to test all possible child nodes in this map
+        child_nodes = [node for node in self._all_nodes if node._parent]
+        # case 2: I only want to test leaf nodes (= the nodes that were added 'the latest')
+        if only_leafs:
+            child_nodes = [node for node in child_nodes if node._is_leaf]
+        # case 3: I want to test only specific node types
+        if child_node_type:
+            child_nodes = [node for node in child_nodes if node._type == child_node_type]
+        # case 4: I want to test only nodes with certain parent node types
+        if candidate_node_types:
+            child_nodes = [node for node in child_nodes if node._parent._type in candidate_node_types]
+        return child_nodes
 
-    def filter_candidates_for_node_type(self):
-        """Filter out all parent nodes and possible candidate nodes that are pros or cons"""
-        all_candidates = self._all_candidates
-        # no pro and cons as candidates
-        all_candidates = [node for node in all_candidates if node._type != "pro" and node._type != "con"]
-        # remove pros and cons as parents
-        new_children = []
-        new_parents = []
-        # no children with pros or cons as parent nodes
-        for i in range(len(self._child_nodes)):
-            if self._parent_nodes[i]._type != "con" and self._parent_nodes[i]._type != "pro":
-                new_parents.append(self._parent_nodes[i])
-                new_children.append(self._child_nodes[i])
-        return new_children, new_parents, all_candidates
-
-    def extract_child_and_parent_nodes(self, node_type):
-        """
-        Extract the children and their corresponding parent. If node type is given (!=None) only child nodes with
-        the given node type are evaluated
-        :param node_type: can be None or "pro", "con", "issue", "idea"
-        :return: child and their parent nodes [list, list]
-        """
-        candidates = self._argument_map._all_children
-        if node_type:
-            candidates = [node for node in candidates if node._type == node_type]
-        children = [node for node in candidates if node._parent]
-        parents = [node._parent for node in children]
-        return children, parents
+    def get_candidate_nodes(self, only_parents, candidate_node_types):
+        """Extract the candidate nodes to be used for evaluation. Apply filtering rules if specified."""
+        # case 1: consider all nodes of a map as candidates
+        candidate_nodes = self._all_nodes
+        # case 2: consider only parents as candidates
+        if only_parents:
+            candidate_nodes = self._parent_nodes
+        # filter out candidates of certain types if that is specified
+        if candidate_node_types:
+            candidate_nodes = [node for node in candidate_nodes if node._type in candidate_node_types]
+        return candidate_nodes
 
     def get_embedding_matrix(self):
         """
@@ -133,11 +98,8 @@ class Evaluation:
         embedding for each node at the corresponding index
         :return: the embeeding matrix [number_of_nodes, embedding_dim], and the node2index as [dict]
         """
-        all_nodes = list(set(self._all_candidates + self._child_nodes + self._parent_nodes))
-        print("length all nodes %d" % len(all_nodes))
-        target2id = dict(zip(all_nodes, range(len(all_nodes))))
-        print(len(target2id))
-        matrix = [all_nodes[i]._embedding for i in range(len(all_nodes))]
+        target2id = dict(zip(self._all_nodes, range(len(self._all_nodes))))
+        matrix = [self._all_nodes[i]._embedding for i in range(len(self._all_nodes))]
         return np.array(matrix), target2id
 
     @staticmethod
@@ -154,34 +116,9 @@ class Evaluation:
     @staticmethod
     def mean_reciprocal_rank(ranks):
         """
-        Computes the mean reciprocal rank for a list of ranks.
+        Computes the mean reciprocal rank for a list of ranks. (As we only have one relevant item, this equals to MAP)
         :param ranks: a list of ranks
         :return: the mean reciprocal rank
         """
         precision_scores = sum([1 / r for r in ranks])
         return precision_scores / len(ranks)
-
-
-if __name__ == '__main__':
-    maps = os.listdir("italian_maps")
-
-    encoder_mulitlingual = MapEncoder(max_seq_len=128, sbert_model_identifier="paraphrase-multilingual-MiniLM-L12-v2",
-                                      normalize_embeddings=True, use_descriptions=False)
-
-    for map in maps:
-        argument_map = ArgumentMap("%s/%s" % ("argument_maps", map))
-        print(argument_map._name)
-        eval = Evaluation(path_to_map="%s/%s" % ("argument_maps", map),
-                          sbert_model_identifier="paraphrase-multilingual-mpnet-base-v2",
-                          max_seq_len=200, encoder=encoder_mulitlingual)
-        ranks_all = eval._ranks
-        ranks_per_type = eval.filter_ranks_by_type()
-        print(eval.precision_at_rank(ranks_all, 1), eval.precision_at_rank(ranks_all, 3))
-        print("MRR")
-        print(eval.mean_reciprocal_rank(ranks_all))
-
-    # map_encoder = MapEncoder(sbert_model_identifier="all-MiniLM-L6-v2", max_seq_len=200, normalize_embeddings=True)
-    # map_encoder.encode_argument_map(map)
-
-    # self._encoder.save_embeddings(unique_id=dic["ID"], embeddings=dic["embeddings"], path_to_pckl="embeddings/%s" % path_to_map.split("/")[-1].replace(".json", ""))
-    # dic = self._encoder.add_stored_embeddings(self._argument_map, "embeddings/%s" % path_to_map.split("/")[-1].replace(".json", ""))
