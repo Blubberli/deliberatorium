@@ -49,19 +49,27 @@ class Evaluation:
         candidate_idxs = [self._node2id[node] for node in self._candidate_nodes]
         # gather similarities for each child to each of the possible candidate nodes and store them in a new matrix
         target_similarity_matrix = np.zeros(shape=[len(candidate_idxs), len(child_idxs)])
+        # a list to store the index of the child in the candidate list
+        to_delete = [None] * len(child_idxs)
         for i in range(len(candidate_idxs)):
             for j in range(len(child_idxs)):
+                if candidate_idxs[i] == child_idxs[j]:
+                    to_delete[j] = i
                 target_similarity_matrix[i, j] = node2node_similarity[candidate_idxs[i], child_idxs[j]]
 
         for i in range(len(self._child_nodes)):
             # compute the similarity between child and correct parent
             child2parent_similarity = np.dot(self._child_nodes[i]._embedding, self._parent_nodes[i]._embedding)
+            # similarities between child and all candidates
+            target_sims = target_similarity_matrix[:, i]
+            # remove similaritiy between child and itself (if child was within the candidates)
+            if to_delete[i]:
+                target_sims = np.delete(target_sims, to_delete[i])
             # the rank is the number of embeddings with greater similarity than the one between
             # the child representation and the parent; no sorting is required, just
             # the number of elements that are more similar
-            target_sims = target_similarity_matrix[:, i]
-            # the highest ranked item will always be the child itself, this is not considered (has rank "0")
-            rank = np.count_nonzero(target_sims > child2parent_similarity)
+            rank = np.count_nonzero(target_sims > child2parent_similarity) + 1
+
             ranks.append(rank)
         return ranks
 
@@ -100,7 +108,7 @@ class Evaluation:
         """
         target2id = dict(zip(self._all_nodes, range(len(self._all_nodes))))
         matrix = [self._all_nodes[i]._embedding for i in range(len(self._all_nodes))]
-        return np.array(matrix), target2id
+        return target2id, np.array(matrix)
 
     @staticmethod
     def precision_at_rank(ranks, k):
