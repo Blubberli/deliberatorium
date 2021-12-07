@@ -11,7 +11,8 @@ class MapEncoder:
     specific argument map.
     """
 
-    def __init__(self, sbert_model_identifier, max_seq_len, use_descriptions=False, normalize_embeddings=False):
+    def __init__(self, sbert_model_identifier, max_seq_len, use_descriptions=False, normalize_embeddings=False,
+                 model=None):
         """
 
         :param sbert_model_identifier: a pretrained sbert model, e.g. all-MiniLM-L6-v2
@@ -23,7 +24,7 @@ class MapEncoder:
         """
         self._use_descriptions = use_descriptions
         self._device = self.get_device()
-        self._sbertModel = SentenceTransformer(sbert_model_identifier, device=self._device)
+        self._sbertModel = model if model else SentenceTransformer(sbert_model_identifier, device=self._device)
         self._max_len = max_seq_len
         self._sbertModel.max_seq_length = self._max_len
         self._normalize_embeddings = normalize_embeddings

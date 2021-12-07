@@ -4,7 +4,7 @@ import numpy as np
 class Evaluation:
 
     def __init__(self, argument_map, only_parents=False, only_leafs=False, child_node_type=None,
-                 candidate_node_types=None):
+                 candidate_node_types=None, no_ranks=False):
         """
         Computes the number of times a rank is equal or lower to a given rank.
         :param argument_map [ArgumentMap]: an ArgumentMap object with initialized embedding nodes (embeddings have to normalized!)
@@ -20,15 +20,16 @@ class Evaluation:
         self._all_nodes = self._argument_map._all_children
         self._node2id, self._embedding_matrix = self.get_embedding_matrix()
         # extract the nodes to be tested
-        self._child_nodes = self.get_child_nodes(only_leafs, child_node_type, candidate_node_types)
+        self.child_nodes = self.get_child_nodes(only_leafs, child_node_type, candidate_node_types)
         # extract their corresponding parents
-        self._parent_nodes = [child._parent for child in self._child_nodes]
+        self.parent_nodes = [child._parent for child in self.child_nodes]
         # extract possible candidate (all parents must be within the candidates)
         self._candidate_nodes = self.get_candidate_nodes(only_parents, candidate_node_types)
 
-        assert len(self._child_nodes) == len(
-            self._parent_nodes), "the number of children and their parents is not the same"
-        self._ranks = self.compute_ranks()
+        assert len(self.child_nodes) == len(
+            self.parent_nodes), "the number of children and their parents is not the same"
+        if not no_ranks:
+            self._ranks = self.compute_ranks()
 
     def compute_ranks(self):
         """
@@ -44,7 +45,7 @@ class Evaluation:
         # compute all possible pairwise similarities
         node2node_similarity = np.dot(self._embedding_matrix, np.transpose(self._embedding_matrix))
         # extract child IDs
-        child_idxs = [self._node2id[node] for node in self._child_nodes]
+        child_idxs = [self._node2id[node] for node in self.child_nodes]
         # extract candidate IDs
         candidate_idxs = [self._node2id[node] for node in self._candidate_nodes]
         # gather similarities for each child to each of the possible candidate nodes and store them in a new matrix
@@ -57,9 +58,9 @@ class Evaluation:
                     to_delete[j] = i
                 target_similarity_matrix[i, j] = node2node_similarity[candidate_idxs[i], child_idxs[j]]
 
-        for i in range(len(self._child_nodes)):
+        for i in range(len(self.child_nodes)):
             # compute the similarity between child and correct parent
-            child2parent_similarity = np.dot(self._child_nodes[i]._embedding, self._parent_nodes[i]._embedding)
+            child2parent_similarity = np.dot(self.child_nodes[i]._embedding, self.parent_nodes[i]._embedding)
             # similarities between child and all candidates
             target_sims = target_similarity_matrix[:, i]
             # remove similaritiy between child and itself (if child was within the candidates)
@@ -94,7 +95,7 @@ class Evaluation:
         candidate_nodes = self._all_nodes
         # case 2: consider only parents as candidates
         if only_parents:
-            candidate_nodes = self._parent_nodes
+            candidate_nodes = self.parent_nodes
         # filter out candidates of certain types if that is specified
         if candidate_node_types:
             candidate_nodes = [node for node in candidate_nodes if node._type in candidate_node_types]
