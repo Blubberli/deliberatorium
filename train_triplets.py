@@ -1,7 +1,6 @@
 import itertools
 import logging
 import math
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -27,12 +26,12 @@ num_epochs = 1
 
 model_save_path_prefix = 'model_' + model_name.replace("/", "-")
 
-data_path = Path.home() / "data/e-delib/deliberatorium/maps/italian_maps"
-data_path = Path.home() / "/mount/projekte/e-delib/data/deliberatorium/maps/italian_maps/"
-maps = os.listdir(data_path)
-argument_maps = [ArgumentMap("%s/%s" % (str(data_path), _map)) for _map in maps]
-maps_samples = [[]] * len(maps)
-print(len(maps))
+data_path = Path.home() / "data/e-delib/deliberatorium/maps"
+data_path = Path("/mount/projekte/e-delib/data/deliberatorium/maps")
+maps = data_path.glob('*_maps/*')
+argument_maps = [ArgumentMap(str(_map)) for _map in maps]
+maps_samples = [[]] * len(argument_maps)
+print(len(argument_maps))
 for i, argument_map in enumerate(argument_maps):
     argument_map_util = Evaluation(argument_map, no_ranks=True)
     for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
@@ -64,7 +63,7 @@ for i, argument_map in enumerate(argument_maps):
     warmup_steps = math.ceil(len(train_dataloader) * num_epochs * 0.1)
     logging.info("Warmup-steps: {}".format(warmup_steps))
 
-    model_save_path = model_save_path_prefix + f'-{maps[i]}-' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    model_save_path = model_save_path_prefix + f'-{argument_map._name}-' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     model.fit(train_objectives=[(train_dataloader, train_loss)],
               epochs=num_epochs,
               # no dev for now
@@ -80,5 +79,4 @@ for i, argument_map in enumerate(argument_maps):
                                       sbert_model_identifier=None,
                                       model=model,
                                       normalize_embeddings=True, use_descriptions=False)
-    encoder_mulitlingual.encode_argument_map(argument_map)
     evaluate_map(encoder_mulitlingual, argument_map)

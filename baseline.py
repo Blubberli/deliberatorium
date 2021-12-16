@@ -14,7 +14,7 @@ def evaluate_map(encoder_mulitlingual, argument_map):
     eval = Evaluation(argument_map=argument_map)
     mrr = eval.mean_reciprocal_rank(eval._ranks)
     sucess_rate = eval.precision_at_rank(eval._ranks, 5) * 100
-    print(eval._ranks)
+    # print(eval._ranks)
     print("default setting: all nodes are evaluated, all nodes are considered as candidates")
     print("child nodes: %d candidates :%d MRR: %.2f SUCESS: %.2f" % (
         len(eval.child_nodes), len(eval._candidate_nodes), mrr, sucess_rate))
