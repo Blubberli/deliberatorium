@@ -19,12 +19,12 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     level=logging.INFO,
                     handlers=[LoggingHandler()])
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--local', type=bool, default=False)
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
-    parser.add_argument('--lang',  help="english, italian, *", type=str, default='*')
+    parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
+    parser.add_argument('--hard_negatives', type=bool, default=True)
     args = parser.parse_args()
 
     model_name = args.model_name_or_path
@@ -43,9 +43,12 @@ if __name__ == '__main__':
     for i, argument_map in enumerate(argument_maps):
         argument_map_util = Evaluation(argument_map, no_ranks=True)
         for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-            for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
-                # NOTE original code also adds opposite
-                maps_samples[i].append(InputExample(texts=[x._name for x in [child, parent, non_parent]]))
+            if args.hard_negatives:
+                for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
+                    # NOTE original code also adds opposite
+                    maps_samples[i].append(InputExample(texts=[x._name for x in [child, parent, non_parent]]))
+            else:
+                maps_samples[i].append(InputExample(texts=[x._name for x in [child, parent]]))
 
     for i, argument_map in enumerate(argument_maps):
         word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
