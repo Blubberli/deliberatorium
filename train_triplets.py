@@ -1,7 +1,7 @@
+import argparse
 import itertools
 import logging
 import math
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -19,64 +19,72 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     level=logging.INFO,
                     handlers=[LoggingHandler()])
 
-model_name = sys.argv[1] if len(sys.argv) > 1 else 'xlm-roberta-base'
-train_batch_size = 128  # The larger you select this, the better the results (usually)
-max_seq_length = 75
-num_epochs = 1
 
-model_save_path_prefix = 'model_' + model_name.replace("/", "-")
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--local', type=bool, default=False)
+    parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
+    parser.add_argument('--lang',  help="english, italian, *", type=str, default='*')
+    args = parser.parse_args()
 
-data_path = Path.home() / "data/e-delib/deliberatorium/maps"
-data_path = Path("/mount/projekte/e-delib/data/deliberatorium/maps")
-maps = data_path.glob('*_maps/*')
-argument_maps = [ArgumentMap(str(_map)) for _map in maps]
-maps_samples = [[]] * len(argument_maps)
-print(len(argument_maps))
-for i, argument_map in enumerate(argument_maps):
-    argument_map_util = Evaluation(argument_map, no_ranks=True)
-    for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-        for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
-            # NOTE original code also adds opposite
-            maps_samples[i].append(InputExample(texts=[x._name for x in [child, parent, non_parent]]))
+    model_name = args.model_name_or_path
+    train_batch_size = 128  # The larger you select this, the better the results (usually)
+    max_seq_length = 75
+    num_epochs = 1
 
-for i, argument_map in enumerate(argument_maps):
-    word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
-    pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
-    model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+    model_save_path_prefix = 'model_' + model_name.replace("/", "-")
 
-    train_samples = list(itertools.chain(*(maps_samples[:i] + maps_samples[i + 1:])))
-    dev_samples = maps_samples[i]
+    data_path = (Path.home() / "data/e-delib/deliberatorium/maps" if args.local else
+                 Path("/mount/projekte/e-delib/data/deliberatorium/maps"))
+    maps = data_path.glob(f'{args.lang}_maps/*')
+    argument_maps = [ArgumentMap(str(_map)) for _map in maps]
+    maps_samples = [[]] * len(argument_maps)
+    print(len(argument_maps))
+    for i, argument_map in enumerate(argument_maps):
+        argument_map_util = Evaluation(argument_map, no_ranks=True)
+        for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
+            for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
+                # NOTE original code also adds opposite
+                maps_samples[i].append(InputExample(texts=[x._name for x in [child, parent, non_parent]]))
 
-    logging.info("Training using: {}".format([x._name for x in argument_maps[:i] + argument_maps[i + 1:]]))
-    logging.info("Evaluating using: {}".format(argument_map._name))
-    logging.info("Train samples: {}".format(len(train_samples)))
-    logging.info("Dev samples: {}".format(len(dev_samples)))
+    for i, argument_map in enumerate(argument_maps):
+        word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
+        pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
+        model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
-    # Special data loader that avoid duplicates within a batch
-    train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=train_batch_size)
-    train_loss = losses.MultipleNegativesRankingLoss(model)
+        train_samples = list(itertools.chain(*(maps_samples[:i] + maps_samples[i + 1:])))
+        dev_samples = maps_samples[i]
 
-    dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size,
-                                                                     name='sts-dev')
+        logging.info("Training using: {}".format([x._name for x in argument_maps[:i] + argument_maps[i + 1:]]))
+        logging.info("Evaluating using: {}".format(argument_map._name))
+        logging.info("Train samples: {}".format(len(train_samples)))
+        logging.info("Dev samples: {}".format(len(dev_samples)))
 
-    # 10% of train data for warm-up
-    warmup_steps = math.ceil(len(train_dataloader) * num_epochs * 0.1)
-    logging.info("Warmup-steps: {}".format(warmup_steps))
+        # Special data loader that avoid duplicates within a batch
+        train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=train_batch_size)
+        train_loss = losses.MultipleNegativesRankingLoss(model)
 
-    model_save_path = model_save_path_prefix + f'-{argument_map._name}-' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    model.fit(train_objectives=[(train_dataloader, train_loss)],
-              epochs=num_epochs,
-              # no dev for now
-              # evaluator=dev_evaluator,
-              # evaluation_steps=int(len(train_dataloader) * 0.1),
-              warmup_steps=warmup_steps,
-              output_path=model_save_path,
-              use_amp=False  # Set to True, if your GPU supports FP16 operations
-              )
+        dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size,
+                                                                         name='sts-dev')
 
-    model = SentenceTransformer(model_save_path)
-    encoder_mulitlingual = MapEncoder(max_seq_len=128,
-                                      sbert_model_identifier=None,
-                                      model=model,
-                                      normalize_embeddings=True, use_descriptions=False)
-    evaluate_map(encoder_mulitlingual, argument_map)
+        # 10% of train data for warm-up
+        warmup_steps = math.ceil(len(train_dataloader) * num_epochs * 0.1)
+        logging.info("Warmup-steps: {}".format(warmup_steps))
+
+        model_save_path = model_save_path_prefix + f'-{argument_map._name}-' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        model.fit(train_objectives=[(train_dataloader, train_loss)],
+                  epochs=num_epochs,
+                  # no dev for now
+                  # evaluator=dev_evaluator,
+                  # evaluation_steps=int(len(train_dataloader) * 0.1),
+                  warmup_steps=warmup_steps,
+                  output_path=model_save_path,
+                  use_amp=False  # Set to True, if your GPU supports FP16 operations
+                  )
+
+        model = SentenceTransformer(model_save_path)
+        encoder_mulitlingual = MapEncoder(max_seq_len=128,
+                                          sbert_model_identifier=None,
+                                          model=model,
+                                          normalize_embeddings=True, use_descriptions=False)
+        evaluate_map(encoder_mulitlingual, argument_map)
