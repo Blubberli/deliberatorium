@@ -21,10 +21,13 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--local', type=bool, default=False)
+    parser.add_argument('--local', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--do_train', type=lambda x: (str(x).lower() == 'true'), default=True)
+    parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
+    parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
     parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
-    parser.add_argument('--hard_negatives', type=bool, default=True)
+    parser.add_argument('--hard_negatives', type=lambda x: (str(x).lower() == 'true'), default=True)
     args = parser.parse_args()
 
     model_name = args.model_name_or_path
@@ -51,43 +54,47 @@ if __name__ == '__main__':
                 maps_samples[i].append(InputExample(texts=[x._name for x in [child, parent]]))
 
     for i, argument_map in enumerate(argument_maps):
-        word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
-        pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
-        model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+        print(args.eval_model_name_or_path)
+        print(args.do_train)
+        if args.do_train:
+            word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
+            pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
+            model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
-        train_samples = list(itertools.chain(*(maps_samples[:i] + maps_samples[i + 1:])))
-        dev_samples = maps_samples[i]
+            train_samples = list(itertools.chain(*(maps_samples[:i] + maps_samples[i + 1:])))
+            dev_samples = maps_samples[i]
 
-        logging.info("Training using: {}".format([x._name for x in argument_maps[:i] + argument_maps[i + 1:]]))
-        logging.info("Evaluating using: {}".format(argument_map._name))
-        logging.info("Train samples: {}".format(len(train_samples)))
-        logging.info("Dev samples: {}".format(len(dev_samples)))
+            logging.info("Training using: {}".format([x._name for x in argument_maps[:i] + argument_maps[i + 1:]]))
+            logging.info("Evaluating using: {}".format(argument_map._name))
+            logging.info("Train samples: {}".format(len(train_samples)))
+            logging.info("Dev samples: {}".format(len(dev_samples)))
 
-        # Special data loader that avoid duplicates within a batch
-        train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=train_batch_size)
-        train_loss = losses.MultipleNegativesRankingLoss(model)
+            # Special data loader that avoid duplicates within a batch
+            train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=train_batch_size)
+            train_loss = losses.MultipleNegativesRankingLoss(model)
 
-        dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size,
-                                                                         name='sts-dev')
+            dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size,
+                                                                             name='sts-dev')
 
-        # 10% of train data for warm-up
-        warmup_steps = math.ceil(len(train_dataloader) * num_epochs * 0.1)
-        logging.info("Warmup-steps: {}".format(warmup_steps))
+            # 10% of train data for warm-up
+            warmup_steps = math.ceil(len(train_dataloader) * num_epochs * 0.1)
+            logging.info("Warmup-steps: {}".format(warmup_steps))
 
-        model_save_path = model_save_path_prefix + f'-{argument_map._name}-' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        model.fit(train_objectives=[(train_dataloader, train_loss)],
-                  epochs=num_epochs,
-                  # no dev for now
-                  # evaluator=dev_evaluator,
-                  # evaluation_steps=int(len(train_dataloader) * 0.1),
-                  warmup_steps=warmup_steps,
-                  output_path=model_save_path,
-                  use_amp=False  # Set to True, if your GPU supports FP16 operations
-                  )
+            model_save_path = model_save_path_prefix + f'-{argument_map._name}-' + datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            model.fit(train_objectives=[(train_dataloader, train_loss)],
+                      epochs=num_epochs,
+                      # no dev for now
+                      # evaluator=dev_evaluator,
+                      # evaluation_steps=int(len(train_dataloader) * 0.1),
+                      warmup_steps=warmup_steps,
+                      output_path=model_save_path,
+                      use_amp=False  # Set to True, if your GPU supports FP16 operations
+                      )
 
-        model = SentenceTransformer(model_save_path)
-        encoder_mulitlingual = MapEncoder(max_seq_len=128,
-                                          sbert_model_identifier=None,
-                                          model=model,
-                                          normalize_embeddings=True, use_descriptions=False)
-        evaluate_map(encoder_mulitlingual, argument_map)
+        if args.do_eval:
+            model = SentenceTransformer(args.eval_model_name_or_path if args.eval_model_name_or_path else model_save_path)
+            encoder_mulitlingual = MapEncoder(max_seq_len=128,
+                                              sbert_model_identifier=None,
+                                              model=model,
+                                              normalize_embeddings=True, use_descriptions=False)
+            evaluate_map(encoder_mulitlingual, argument_map)
