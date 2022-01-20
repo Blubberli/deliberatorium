@@ -11,6 +11,7 @@ def mock_parse_args(overwrite_args=None):
                     'local': True,
                     'do_train': False,
                     'do_eval': False,
+                    'hard_negatives': True,
                     'lang': '*',
                     'argument_map': '*'}
     train_triplets.parse_args = lambda: {**default_args,
