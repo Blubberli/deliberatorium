@@ -1,4 +1,4 @@
-from argumentMap import ArgumentMap
+import re
 from sentence_transformers import SentenceTransformer
 import torch
 import pickle
@@ -41,7 +41,7 @@ class MapEncoder:
             device = "cpu"
         return device
 
-    def encode_argument_map(self, argument_map):
+    def encode_argument_map(self, argument_map, clean_text):
         """
         loads an argument map from a path. adds the sbert embedding representation to each node.
         :param path: [str] the location of the argument map to be encoded
@@ -49,13 +49,15 @@ class MapEncoder:
         """
         nodes = argument_map._all_children
         sentences = [node._name for node in nodes]
-        descriptions = [node._description for node in nodes]
         unique_ids = [node._id for node in nodes]
         if self._use_descriptions:
+            descriptions = [node._description for node in nodes]
             sentences = [
                 sentences[i] + " : " + descriptions[i] if (descriptions[i] != '' and descriptions[i] != None) else
                 sentences[i] for i in
                 range(len(sentences))]
+        if clean_text:
+            sentences = [MapEncoder.remove_links(s) for s in sentences]
         embeddings = self._sbertModel.encode(sentences, show_progress_bar=True,
                                              normalize_embeddings=self._normalize_embeddings)
         for i in range(len(nodes)):
@@ -88,3 +90,13 @@ class MapEncoder:
             # stored_ids = stored_data["ID"]
         return stored_data
         # return {"sentences": stored_sentences, "embeddings": stored_embeddings, "ID": stored_ids, "ID2EMBEDDINGS":}
+
+    @staticmethod
+    def remove_links(sentence):
+        pattern = "((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([a-zA-Z0-9\.\&\/\?\:@\-_=#])*"
+        if re.search(pattern, sentence):
+            sentence = sentence.replace(re.search(pattern, sentence).group(0), "")
+        if re.search("\(\)", sentence):
+            sentence = sentence.replace(re.search("\(\)", sentence).group(0), "")
+        sentence = sentence.replace("[", "").replace("]", "")
+        return sentence

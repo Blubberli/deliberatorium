@@ -124,7 +124,7 @@ def main():
                                                   sbert_model_identifier=None,
                                                   model=model,
                                                   normalize_embeddings=True, use_descriptions=False)
-                evaluate_map(encoder_mulitlingual, eval_argument_map)
+                evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
 
 
 if __name__ == '__main__':
