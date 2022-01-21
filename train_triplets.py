@@ -45,9 +45,9 @@ def parse_args():
     return args
 
 
-def get_model_save_path(model_name, map, train_on_one_map):
-    model_save_path_prefix = 'results/model_on' + model_name.replace("/", "-")
-    return model_save_path_prefix + ('trained' if train_on_one_map else 'evaluated') + f'-on-{map}'
+def get_model_save_path(model_name, map_label, train_on_one_map):
+    model_save_path_prefix = 'results/' + model_name.replace("/", "-")
+    return model_save_path_prefix + ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}'
 
 
 def main():
@@ -78,7 +78,7 @@ def main():
     for i, argument_map in enumerate(argument_maps):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
-        model_save_path = get_model_save_path(model_name, maps[i], args['train_on_one_map'])
+        model_save_path = get_model_save_path(model_name, argument_map.label, args['train_on_one_map'])
 
         if args['do_train']:
             word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
@@ -121,7 +121,7 @@ def main():
             eval_argument_maps = ((argument_maps[:i] + argument_maps[i + 1:]) if args['train_on_one_map'] else
                                   [argument_maps[i]])
 
-            results_path = Path(model_save_path) / 'results'
+            results_path = Path(model_save_path + '-results')
             results_path.mkdir(exist_ok=True)
 
             for eval_argument_map in eval_argument_maps:
@@ -130,7 +130,7 @@ def main():
                                                   model=model,
                                                   normalize_embeddings=True, use_descriptions=False)
                 results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
-                (results_path / eval_argument_map.label).write_text(json.dumps(results))
+                (results_path / f'{eval_argument_map.label}.json').write_text(json.dumps(results))
 
 
 if __name__ == '__main__':
