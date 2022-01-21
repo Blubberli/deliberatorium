@@ -2,7 +2,6 @@ import json
 import re
 from abc import ABC, abstractmethod
 from childNode import DelibChildNode, KialoChildNode
-from encode_nodes import MapEncoder
 
 
 class ArgumentMap(ABC):
@@ -120,6 +119,7 @@ class KialoMap(ArgumentMap):
                 id = line.split(" ")[0]
                 type = line.split(" ")[1].replace(":", "").strip()
                 text = " ".join(line.split(" ")[2:]).strip()
+                text = self.remove_links(text)
                 data_dict["children"].append({"id": id, "type": type, "name": text})
         # for each child the list of direct children has to be added to the node dictionary (which can only
         # be retrieved after having read the file completely.
@@ -150,3 +150,14 @@ class KialoMap(ArgumentMap):
     def get_max_depth(self):
         """Return the maximal tree depth of this map"""
         return max([node._depth for node in self._all_children])
+
+    @staticmethod
+    def remove_links(sentence):
+        """Removes all links and empty brackets '()' from a text."""
+        pattern = "((http|https)\:\/\/)?[a-zA-Z0-9\.\/\?\:@\-_=#]+\.([a-zA-Z]){2,6}([a-zA-Z0-9\.\&\/\?\:@\-_=#])*"
+        if re.search(pattern, sentence):
+            sentence = sentence.replace(re.search(pattern, sentence).group(0), "")
+        if re.search("\(\)", sentence):
+            sentence = sentence.replace(re.search("\(\)", sentence).group(0), "")
+        sentence = sentence.replace("[", "").replace("]", "")
+        return sentence

@@ -8,7 +8,7 @@ from evaluation import Evaluation
 
 def evaluate_map(encoder_mulitlingual, argument_map, node_types):
     print(argument_map._name)
-    encoder_mulitlingual.encode_argument_map(argument_map, clean_text=True)
+    encoder_mulitlingual.encode_argument_map(argument_map)
     # default setting: all nodes are evaluated, all nodes are considered as candidates
     eval = Evaluation(argument_map=argument_map)
     mrr = eval.mean_reciprocal_rank(eval._ranks)
@@ -33,7 +33,6 @@ def evaluate_map(encoder_mulitlingual, argument_map, node_types):
     print("only leaf nodes and only %s as parents" % (",").join(node_types))
     print("child nodes: %d candidates :%d MRR: %.2f SUCESS: %.2f ACCURACY: %.2f" % (
         len(eval.child_nodes), len(eval._candidate_nodes), mrr, sucess_rate, accuracy))
-
 
 
 def deliberatorium_baseline():
