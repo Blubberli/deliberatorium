@@ -1,5 +1,6 @@
 import argparse
 import itertools
+import json
 import logging
 import math
 from pathlib import Path
@@ -9,7 +10,7 @@ from sentence_transformers import LoggingHandler, SentenceTransformer, InputExam
 from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 
-from argumentMap import ArgumentMap
+from argumentMap import ArgumentMap, DeliberatoriumMap
 from baseline import evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
@@ -60,7 +61,7 @@ def main():
                  Path("/mount/projekte/e-delib/data/deliberatorium/maps"))
     maps = list(data_path.glob(f"{args['lang']}_maps/*.json"))
     logging.info('processing maps: ' + str(maps))
-    argument_maps = [ArgumentMap(str(_map)) for _map in maps]
+    argument_maps = [DeliberatoriumMap(str(_map), _map.stem) for _map in maps]
     maps_samples = [[]] * len(argument_maps)
     print(len(argument_maps))
 
@@ -119,12 +120,17 @@ def main():
                                         model_save_path)
             eval_argument_maps = ((argument_maps[:i] + argument_maps[i + 1:]) if args['train_on_one_map'] else
                                   [argument_maps[i]])
+
+            results_path = Path(model_save_path) / 'results'
+            results_path.mkdir(exist_ok=True)
+
             for eval_argument_map in eval_argument_maps:
                 encoder_mulitlingual = MapEncoder(max_seq_len=128,
                                                   sbert_model_identifier=None,
                                                   model=model,
                                                   normalize_embeddings=True, use_descriptions=False)
-                evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
+                results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
+                (results_path / eval_argument_map.label).write_text(json.dumps(results))
 
 
 if __name__ == '__main__':

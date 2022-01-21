@@ -13,7 +13,7 @@ class ArgumentMap(ABC):
     can have zero to several children.
     """
 
-    def __init__(self, data_path):
+    def __init__(self, data_path, label=None):
         """
         Initialize the Map given the path to the data to load from. Every map has the following attributes:
         id: a unique identifier, e.g. 'E-1R8DN19-3171'
@@ -21,6 +21,7 @@ class ArgumentMap(ABC):
         Args:
             data_path: path to the file that contains the data of the argument map.
         """
+        self.label = label
         self._data = self.load_data(data_path)
         self._id = self._data["id"]
         self._name = self._data["name"]
@@ -64,13 +65,13 @@ class DeliberatoriumMap(ArgumentMap):
     An ArgumentMap for Maps from Deliberatorium
     """
 
-    def __init__(self, data_path):
+    def __init__(self, data_path, label=None):
         """
         Additional attributes for this type of Map are:
         description: a more detailed description, can be 'None'
         :param data_path: the path to the json file of the argument map
         """
-        super(DeliberatoriumMap, self).__init__(data_path)
+        super(DeliberatoriumMap, self).__init__(data_path, label)
         self._description = self._data["description"]
 
     def load_data(self, json_file):
@@ -94,8 +95,8 @@ class DeliberatoriumMap(ArgumentMap):
 
 class KialoMap(ArgumentMap):
 
-    def __init__(self, data_path):
-        super(KialoMap, self).__init__(data_path)
+    def __init__(self, data_path, label=None):
+        super(KialoMap, self).__init__(data_path, label)
         self._max_depth = self.get_max_depth()
 
     def load_data(self, data_path):
