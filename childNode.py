@@ -20,24 +20,24 @@ class ChildNode(ABC):
         parent: exactly one node that is the parent of this node (or None if it is the root node)
         embedding: either None if it has not been encoded yet, or an embedding representation of this node
         """
-        self._id = node_dict["id"]
-        self._name = node_dict["name"]
-        self._type = node_dict["type"]
-        self._direct_children = self.init_direct_children(node_dict)
+        self.id = node_dict["id"]
+        self.name = node_dict["name"]
+        self.type = node_dict["type"]
+        self.direct_children = self.init_direct_children(node_dict)
         # if child list is empty this node is a leaf node
-        self._is_leaf = True if len(self._direct_children) == 0 else False
-        self._parent = None
-        self._embedding = None
+        self.is_leaf = True if len(self.direct_children) == 0 else False
+        self.parent = None
+        self.embedding = None
         # set this node as parent for each of its' children
-        for child in self._direct_children:
-            child._parent = self
+        for child in self.direct_children:
+            child.parent = self
 
     def add_embedding(self, embedding):
         """adds an embedding representation for this node, sets flag to true"""
-        self._embedding = embedding
+        self.embedding = embedding
 
     def __str__(self):
-        return str(self._name)
+        return str(self.name)
 
     @abstractmethod
     def init_direct_children(self, node_dict) -> list:
@@ -55,9 +55,9 @@ class DelibChildNode(ChildNode):
         """
         super(DelibChildNode, self).__init__(node_dict)
 
-        self._description = node_dict["description"]
-        self._creator = node_dict["creator"]
-        self._events = self.init_events(node_dict["events"])
+        self.description = node_dict["description"]
+        self.creator = node_dict["creator"]
+        self.events = self.init_events(node_dict["events"])
 
     def init_direct_children(self, node_dict):
         """Initialize all direct child nodes, returns the empty list if no children"""
@@ -77,7 +77,7 @@ class DelibChildNode(ChildNode):
 
     def number_events(self):
         """Returns the number of events connected to this child"""
-        return len(self._events)
+        return len(self.events)
 
 
 class KialoChildNode(ChildNode):
@@ -93,7 +93,7 @@ class KialoChildNode(ChildNode):
         :param node_dict: the dictionary representation of the node
         """
         super(KialoChildNode, self).__init__(node_dict)
-        self._depth = self.get_depth()
+        self.depth = self.get_depth()
 
     def init_direct_children(self, node_dict):
         """Initialize all direct child nodes, returns the empty list if no children"""
@@ -106,4 +106,4 @@ class KialoChildNode(ChildNode):
 
     def get_depth(self):
         """Returns the depth of this node"""
-        return self._id.count(".")
+        return self.id.count(".")

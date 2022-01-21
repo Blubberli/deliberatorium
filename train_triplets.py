@@ -71,9 +71,9 @@ def main():
             if args['hard_negatives']:
                 for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
                     # NOTE original code also adds opposite
-                    maps_samples[i].append(InputExample(texts=[x._name for x in [child, parent, non_parent]]))
+                    maps_samples[i].append(InputExample(texts=[x.name for x in [child, parent, non_parent]]))
             else:
-                maps_samples[i].append(InputExample(texts=[x._name for x in [child, parent]]))
+                maps_samples[i].append(InputExample(texts=[x.name for x in [child, parent]]))
 
     for i, argument_map in enumerate(argument_maps):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):

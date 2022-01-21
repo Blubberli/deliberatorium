@@ -21,12 +21,12 @@ class MapEncoder:
         :param normalize_embeddings: whether to normalize the sentence embeddings to unit length. If true, dot product
         can be used to compute similarity. Default is false.
         """
-        self._use_descriptions = use_descriptions
-        self._device = self.get_device()
-        self._sbertModel = model if model else SentenceTransformer(sbert_model_identifier, device=self._device)
-        self._max_len = max_seq_len
-        self._sbertModel.max_seq_length = self._max_len
-        self._normalize_embeddings = normalize_embeddings
+        self.use_descriptions = use_descriptions
+        self.device = self.get_device()
+        self.sbertModel = model if model else SentenceTransformer(sbert_model_identifier, device=self.device)
+        self.max_len = max_seq_len
+        self.sbertModel.max_seq_length = self.max_len
+        self.normalize_embeddings = normalize_embeddings
 
         print("loaded sbert model from %s" % sbert_model_identifier)
 
@@ -46,17 +46,17 @@ class MapEncoder:
         :param path: [str] the location of the argument map to be encoded
         :return: a dictionary with embddings, corresponding sentences and corresponding IDs
         """
-        nodes = argument_map._all_children
-        sentences = [node._name for node in nodes]
-        unique_ids = [node._id for node in nodes]
-        if self._use_descriptions:
-            descriptions = [node._description for node in nodes]
+        nodes = argument_map.all_children
+        sentences = [node.name for node in nodes]
+        unique_ids = [node.id for node in nodes]
+        if self.use_descriptions:
+            descriptions = [node.description for node in nodes]
             sentences = [
                 sentences[i] + " : " + descriptions[i] if (descriptions[i] != '' and descriptions[i] != None) else
                 sentences[i] for i in
                 range(len(sentences))]
-        embeddings = self._sbertModel.encode(sentences, show_progress_bar=True,
-                                             normalize_embeddings=self._normalize_embeddings)
+        embeddings = self.sbertModel.encode(sentences, show_progress_bar=True,
+                                             normalize_embeddings=self.normalize_embeddings)
         for i in range(len(nodes)):
             nodes[i].add_embedding(embeddings[i])
         return {"embeddings": embeddings, "sentences": sentences, "ID": unique_ids}
@@ -64,9 +64,9 @@ class MapEncoder:
     def add_stored_embeddings(self, argument_map, path_to_pckl):
         """Given a path of pregenerated embeddings, add"""
         data = self.load_embeddings(path_to_pckl=path_to_pckl)
-        nodes = argument_map._all_children
+        nodes = argument_map.all_children
         for node in nodes:
-            id = node._id
+            id = node.id
             embedding = data[id]
             node.add_embedding(embedding)
 

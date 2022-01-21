@@ -21,16 +21,16 @@ class ArgumentMap(ABC):
             data_path: path to the file that contains the data of the argument map.
         """
         self.label = label
-        self._data = self.load_data(data_path)
-        self._id = self._data["id"]
-        self._name = self._data["name"]
-        self._direct_children = self.init_children()
+        self.data = self.load_data(data_path)
+        self.id = self.data["id"]
+        self.name = self.data["name"]
+        self.direct_children = self.init_children()
         all_children = []
         # create a list that stores all nodes of a map by iterating through the first level of nodes
         # and calling the recursive method for each child.
-        for child in self._direct_children:
+        for child in self.direct_children:
             all_children = self.get_all_children(node=child, child_list=all_children)
-        self._all_children = all_children
+        self.all_children = all_children
 
     @abstractmethod
     def load_data(self, data_path) -> dict:
@@ -44,19 +44,19 @@ class ArgumentMap(ABC):
     def get_all_children(self, node, child_list):
         """recursively iterate trough all nodes of a map and append the children and their children..."""
         child_list.append(node)
-        if node._is_leaf:
+        if node.is_leaf:
             return child_list
         else:
-            for childnode in node._direct_children:
+            for childnode in node.direct_children:
                 self.get_all_children(childnode, child_list)
         return child_list
 
     def number_of_children(self):
         """Returns the number of child nodes in the map"""
-        return len(self._all_children)
+        return len(self.all_children)
 
     def __str__(self):
-        return str(self._name)
+        return str(self.name)
 
 
 class DeliberatoriumMap(ArgumentMap):
@@ -71,7 +71,7 @@ class DeliberatoriumMap(ArgumentMap):
         :param data_path: the path to the json file of the argument map
         """
         super(DeliberatoriumMap, self).__init__(data_path, label)
-        self._description = self._data["description"]
+        self.description = self.data["description"]
 
     def load_data(self, json_file):
         """Loads the json object from the json file"""
@@ -86,8 +86,8 @@ class DeliberatoriumMap(ArgumentMap):
     def init_children(self):
         """Initializes the first level of children = all nodes that are directly located at the root of the map"""
         children_list = []
-        if self._data["children"]:
-            for child in self._data["children"]:
+        if self.data["children"]:
+            for child in self.data["children"]:
                 children_list.append(DelibChildNode(child))
         return children_list
 
@@ -96,7 +96,7 @@ class KialoMap(ArgumentMap):
 
     def __init__(self, data_path, label=None):
         super(KialoMap, self).__init__(data_path, label)
-        self._max_depth = self.get_max_depth()
+        self.max_depth = self.get_max_depth()
 
     def load_data(self, data_path):
         """Loads the data from the .txt files"""
@@ -131,8 +131,8 @@ class KialoMap(ArgumentMap):
     def init_children(self):
         """Initializes the first level of children = all nodes that are directly located at the root of the map"""
         children_list = []
-        if self._data["children"]:
-            for child in self._data["children"]:
+        if self.data["children"]:
+            for child in self.data["children"]:
                 if child["id"].count(".") == 2:
                     children_list.append(KialoChildNode(child))
         return children_list
@@ -150,7 +150,7 @@ class KialoMap(ArgumentMap):
 
     def get_max_depth(self):
         """Return the maximal tree depth of this map"""
-        return max([node._depth for node in self._all_children])
+        return max([node.depth for node in self.all_children])
 
     @staticmethod
     def remove_links(sentence):

@@ -15,21 +15,21 @@ class Evaluation:
         are considered as candidates
         """
         # argument map with encoded nodes
-        self._argument_map = argument_map
+        self.argument_map = argument_map
         # gather all nodes in the map and construct a node2index and an embedding matrix
-        self._all_nodes = self._argument_map._all_children
-        self._node2id, self._embedding_matrix = self.get_embedding_matrix()
+        self.all_nodes = self.argument_map.all_children
+        self.node2id, self.embedding_matrix = self.get_embedding_matrix()
         # extract the nodes to be tested
         self.child_nodes = self.get_child_nodes(only_leafs, child_node_type, candidate_node_types)
         # extract their corresponding parents
-        self.parent_nodes = [child._parent for child in self.child_nodes]
+        self.parent_nodes = [child.parent for child in self.child_nodes]
         # extract possible candidate (all parents must be within the candidates)
-        self._candidate_nodes = self.get_candidate_nodes(only_parents, candidate_node_types)
+        self.candidate_nodes = self.get_candidate_nodes(only_parents, candidate_node_types)
 
         assert len(self.child_nodes) == len(
             self.parent_nodes), "the number of children and their parents is not the same"
         if not no_ranks:
-            self._ranks = self.compute_ranks()
+            self.ranks = self.compute_ranks()
 
     def compute_ranks(self):
         """
@@ -43,11 +43,11 @@ class Evaluation:
         """
         ranks = []
         # compute all possible pairwise similarities
-        node2node_similarity = np.dot(self._embedding_matrix, np.transpose(self._embedding_matrix))
+        node2node_similarity = np.dot(self.embedding_matrix, np.transpose(self.embedding_matrix))
         # extract child IDs
-        child_idxs = [self._node2id[node] for node in self.child_nodes]
+        child_idxs = [self.node2id[node] for node in self.child_nodes]
         # extract candidate IDs
-        candidate_idxs = [self._node2id[node] for node in self._candidate_nodes]
+        candidate_idxs = [self.node2id[node] for node in self.candidate_nodes]
         # gather similarities for each child to each of the possible candidate nodes and store them in a new matrix
         target_similarity_matrix = np.zeros(shape=[len(candidate_idxs), len(child_idxs)])
         # a list to store the index of the child in the candidate list
@@ -60,7 +60,7 @@ class Evaluation:
 
         for i in range(len(self.child_nodes)):
             # compute the similarity between child and correct parent
-            child2parent_similarity = np.dot(self.child_nodes[i]._embedding, self.parent_nodes[i]._embedding)
+            child2parent_similarity = np.dot(self.child_nodes[i].embedding, self.parent_nodes[i].embedding)
             # similarities between child and all candidates
             target_sims = target_similarity_matrix[:, i]
             # remove similaritiy between child and itself (if child was within the candidates)
@@ -77,28 +77,28 @@ class Evaluation:
     def get_child_nodes(self, only_leafs, child_node_type, candidate_node_types):
         """Extract the child nodes to be used for evaluation. Apply filtering rules if specified."""
         # case 1: I want to test all possible child nodes in this map
-        child_nodes = [node for node in self._all_nodes if node._parent]
+        child_nodes = [node for node in self.all_nodes if node.parent]
         # case 2: I only want to test leaf nodes (= the nodes that were added 'the latest')
         if only_leafs:
-            child_nodes = [node for node in child_nodes if node._is_leaf]
+            child_nodes = [node for node in child_nodes if node.is_leaf]
         # case 3: I want to test only specific node types
         if child_node_type:
-            child_nodes = [node for node in child_nodes if node._type == child_node_type]
+            child_nodes = [node for node in child_nodes if node.type == child_node_type]
         # case 4: I want to test only nodes with certain parent node types
         if candidate_node_types:
-            child_nodes = [node for node in child_nodes if node._parent._type in candidate_node_types]
+            child_nodes = [node for node in child_nodes if node.parent.type in candidate_node_types]
         return child_nodes
 
     def get_candidate_nodes(self, only_parents, candidate_node_types):
         """Extract the candidate nodes to be used for evaluation. Apply filtering rules if specified."""
         # case 1: consider all nodes of a map as candidates
-        candidate_nodes = self._all_nodes
+        candidate_nodes = self.all_nodes
         # case 2: consider only parents as candidates
         if only_parents:
             candidate_nodes = self.parent_nodes
         # filter out candidates of certain types if that is specified
         if candidate_node_types:
-            candidate_nodes = [node for node in candidate_nodes if node._type in candidate_node_types]
+            candidate_nodes = [node for node in candidate_nodes if node.type in candidate_node_types]
         return candidate_nodes
 
     def get_embedding_matrix(self):
@@ -107,8 +107,8 @@ class Evaluation:
         embedding for each node at the corresponding index
         :return: the embeeding matrix [number_of_nodes, embedding_dim], and the node2index as [dict]
         """
-        target2id = dict(zip(self._all_nodes, range(len(self._all_nodes))))
-        matrix = [self._all_nodes[i]._embedding for i in range(len(self._all_nodes))]
+        target2id = dict(zip(self.all_nodes, range(len(self.all_nodes))))
+        matrix = [self.all_nodes[i].embedding for i in range(len(self.all_nodes))]
         return target2id, np.array(matrix)
 
     @staticmethod
