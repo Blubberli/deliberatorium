@@ -15,7 +15,7 @@ from baseline import evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 
-AVAILABLE_MAPS = ['doppariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
+AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
 
 logging.basicConfig(format='%(asctime)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
     parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
     parser.add_argument('--argument_map',
-                        help="argument map from (doppariam1, doppariam2, biofuels, RCOM, CI4CG) to train on",
+                        help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
                         type=str, default=None)
     parser.add_argument('--train_on_one_map',
                         help="either train on `argument_map` and eval on all others or train on all others and evaluate on `argument_map`",
@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument('--hard_negatives', type=lambda x: (str(x).lower() == 'true'), default=True)
     args = vars(parser.parse_args())
     assert args['argument_map'] in AVAILABLE_MAPS, \
-        f"{args['argument_map']=} is not a value from (doppariam1, doppariam2, biofuels, RCOM, CI4CG)"
+        f"{args['argument_map']=} is not a value from: {', '.join(AVAILABLE_MAPS)}"
     pprint(args)
     return args
 
