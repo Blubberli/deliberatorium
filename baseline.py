@@ -7,32 +7,28 @@ from evaluation import Evaluation
 
 
 def evaluate_map(encoder_mulitlingual, argument_map, node_types):
-    print(argument_map._name)
-    encoder_mulitlingual.encode_argument_map(argument_map)
-    # default setting: all nodes are evaluated, all nodes are considered as candidates
-    eval = Evaluation(argument_map=argument_map)
-    mrr = eval.mean_reciprocal_rank(eval._ranks)
-    sucess_rate = eval.precision_at_rank(eval._ranks, 5) * 100
-    accuracy = eval.precision_at_rank(eval._ranks, 1)
+    results = {}
+    print('eval', argument_map._name)
+    encoder_mulitlingual.encode_argument_map(argument_map, clean_text=True)
     print("default setting: all nodes are evaluated, all nodes are considered as candidates")
-    print("child nodes: %d candidates :%d MRR: %.2f SUCESS: %.2f ACCURACY: %.2f" % (
-        len(eval.child_nodes), len(eval._candidate_nodes), mrr, sucess_rate, accuracy))
-    # only check for leaf nodes
-    eval = Evaluation(argument_map=argument_map, only_leafs=True)
-    mrr = eval.mean_reciprocal_rank(eval._ranks)
-    sucess_rate = eval.precision_at_rank(eval._ranks, 5) * 100
-    accuracy = eval.precision_at_rank(eval._ranks, 1)
+    results['all'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True))
     print("only check for leaf nodes")
-    print("child nodes: %d candidates :%d MRR: %.2f SUCESS: %.2f ACCURACY: %.2f" % (
-        len(eval.child_nodes), len(eval._candidate_nodes), mrr, sucess_rate, accuracy))
-    # only leaf nodes and only issues and ideas as parents
-    eval = Evaluation(argument_map=argument_map, only_leafs=True, candidate_node_types=node_types)
-    mrr = eval.mean_reciprocal_rank(eval._ranks)
-    sucess_rate = eval.precision_at_rank(eval._ranks, 5) * 100
-    accuracy = eval.precision_at_rank(eval._ranks, 1)
-    print("only leaf nodes and only %s as parents" % (",").join(node_types))
-    print("child nodes: %d candidates :%d MRR: %.2f SUCESS: %.2f ACCURACY: %.2f" % (
-        len(eval.child_nodes), len(eval._candidate_nodes), mrr, sucess_rate, accuracy))
+    results['only_leafs'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True))
+    print("only leaf nodes and only issues and ideas as parents")
+    results['only_leafs_limited_types'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
+                                                              candidate_node_types=node_types))
+    return results
+
+
+def eval_one(evaluation: Evaluation):
+    mrr = evaluation.mean_reciprocal_rank(evaluation._ranks)
+    p5 = evaluation.precision_at_rank(evaluation._ranks, 5)
+    p1 = evaluation.precision_at_rank(evaluation._ranks, 1)
+    # print(eval._ranks)
+    print("child nodes: %d candidates :%d MRR: %.2f p@5: %.2f p@1: %.2f" % (
+        len(evaluation.child_nodes), len(evaluation._candidate_nodes), mrr, p5, p1))
+    return {'mrr': mrr, 'p5': p5, 'p1': p1}
+
 
 
 def deliberatorium_baseline():
