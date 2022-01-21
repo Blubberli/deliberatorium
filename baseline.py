@@ -9,7 +9,7 @@ from evaluation import Evaluation
 def evaluate_map(encoder_mulitlingual, argument_map, node_types):
     results = {}
     print('eval', argument_map._name)
-    encoder_mulitlingual.encode_argument_map(argument_map, clean_text=True)
+    encoder_mulitlingual.encode_argument_map(argument_map)
     print("default setting: all nodes are evaluated, all nodes are considered as candidates")
     results['all'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True))
     print("only check for leaf nodes")
