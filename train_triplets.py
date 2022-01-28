@@ -91,8 +91,8 @@ def main():
             train_samples = (maps_samples[i] if args['train_on_one_map'] else all_other_samples)
             dev_samples = (maps_samples[i] if not args['train_on_one_map'] else all_other_samples)
 
-            logging.info("Training using: {}".format([x._name for x in argument_maps[:i] + argument_maps[i + 1:]]))
-            logging.info("Evaluating using: {}".format(argument_map._name))
+            logging.info("Training using: {}".format([x.name for x in argument_maps[:i] + argument_maps[i + 1:]]))
+            logging.info("Evaluating using: {}".format(argument_map.name))
             logging.info("Train samples: {}".format(len(train_samples)))
             logging.info("Dev samples: {}".format(len(dev_samples)))
 
