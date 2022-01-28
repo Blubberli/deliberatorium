@@ -10,7 +10,7 @@ from sentence_transformers import LoggingHandler, SentenceTransformer, InputExam
 from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 
-from argumentMap import ArgumentMap, DeliberatoriumMap
+from argumentMap import DeliberatoriumMap
 from baseline import evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
@@ -30,6 +30,7 @@ def parse_args():
     parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
+    parser.add_argument('--output_dir_label', type=str)
     parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
@@ -45,8 +46,8 @@ def parse_args():
     return args
 
 
-def get_model_save_path(model_name, map_label, train_on_one_map):
-    model_save_path_prefix = 'results/' + model_name.replace("/", "-")
+def get_model_save_path(model_name, map_label, train_on_one_map, output_dir_label):
+    model_save_path_prefix = 'results/' + model_name.replace("/", "-") + output_dir_label
     return model_save_path_prefix + ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}'
 
 
@@ -78,7 +79,8 @@ def main():
     for i, argument_map in enumerate(argument_maps):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
-        model_save_path = get_model_save_path(model_name, argument_map.label, args['train_on_one_map'])
+        model_save_path = get_model_save_path(model_name, argument_map.label, args['train_on_one_map'],
+                                              args['output_dir_label'])
 
         if args['do_train']:
             word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
