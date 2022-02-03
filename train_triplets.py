@@ -35,6 +35,9 @@ def parse_args():
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
                         type=str, default=None)
+    parser.add_argument('--argument_map_dev',
+                        help=f"argument map from {', '.join(AVAILABLE_MAPS)} to use as dev",
+                        type=lambda x: (str(x).lower() == 'true'), default=None)
     parser.add_argument('--train_on_one_map',
                         help="either train on `argument_map` and eval on all others or train on all others and evaluate on `argument_map`",
                         type=lambda x: (str(x).lower() == 'true'), default=False)
@@ -46,13 +49,19 @@ def parse_args():
     return args
 
 
-def get_model_save_path(model_name, map_label, train_on_one_map, output_dir_label):
+def get_model_save_path(model_name, map_label, map_label_dev, train_on_one_map, output_dir_label):
     model_save_path_prefix = 'results/' + model_name.replace("/", "-") + output_dir_label
-    return model_save_path_prefix + ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}'
+    return model_save_path_prefix + ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}' + \
+           (f'-dev-{map_label_dev}' if map_label_dev else '')
 
 
 def main():
     args = parse_args()
+    
+    if args['argument_map'] == args['argument_map_dev']:
+        logging.info('same value for argument_map and argument_map_dev! exiting')
+        exit()
+    
     model_name = args['model_name_or_path']
     train_batch_size = 128  # The larger you select this, the better the results (usually)
     max_seq_length = 75
@@ -79,7 +88,8 @@ def main():
     for i, argument_map in enumerate(argument_maps):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
-        model_save_path = get_model_save_path(model_name, argument_map.label, args['train_on_one_map'],
+        model_save_path = get_model_save_path(model_name, argument_map.label, args['argument_map_dev'],
+                                              args['train_on_one_map'],
                                               args['output_dir_label'])
 
         if args['do_train']:
@@ -87,9 +97,14 @@ def main():
             pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
             model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
-            all_other_samples = list(itertools.chain(*(maps_samples[:i] + maps_samples[i + 1:])))
-            train_samples = (maps_samples[i] if args['train_on_one_map'] else all_other_samples)
-            dev_samples = (maps_samples[i] if not args['train_on_one_map'] else all_other_samples)
+            if args['train_on_one_map']:
+                train_samples = maps_samples[i]
+            else:
+                train_maps = [x for x in maps_samples[:i] + maps_samples[i + 1:]
+                              if x.label != args['argument_map_dev']]
+                train_samples = list(itertools.chain(*train_maps))
+            dev_samples = next(x for x in maps_samples[:i] + maps_samples[i + 1:]
+                               if x.label == args['argument_map_dev']) if args['argument_map_dev'] else []
 
             logging.info("Training using: {}".format([x.name for x in argument_maps[:i] + argument_maps[i + 1:]]))
             logging.info("Evaluating using: {}".format(argument_map.name))
@@ -109,9 +124,8 @@ def main():
 
             model.fit(train_objectives=[(train_dataloader, train_loss)],
                       epochs=num_epochs,
-                      # no dev for now
-                      # evaluator=dev_evaluator,
-                      # evaluation_steps=int(len(train_dataloader) * 0.1),
+                      evaluator=dev_evaluator,
+                      evaluation_steps=int(len(train_dataloader) * 0.1) if args['argument_map_dev'] else 0,
                       warmup_steps=warmup_steps,
                       output_path=model_save_path,
                       use_amp=False  # Set to True, if your GPU supports FP16 operations
