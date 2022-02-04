@@ -26,6 +26,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--local', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--debug', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--do_train', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
@@ -70,10 +71,9 @@ def main():
     data_path = (Path.home() / "data/e-delib/deliberatorium/maps" if args['local'] else
                  Path("/mount/projekte/e-delib/data/deliberatorium/maps"))
     maps = list(data_path.glob(f"{args['lang']}_maps/*.json"))
-    logging.info('processing maps: ' + str(maps))
+    logging.info(f'processing {len(maps)} maps: ' + str(maps))
     argument_maps = [DeliberatoriumMap(str(_map), _map.stem) for _map in maps]
     maps_samples = [[]] * len(argument_maps)
-    print(len(argument_maps))
 
     for i, argument_map in enumerate(argument_maps):
         argument_map_util = Evaluation(argument_map, no_ranks=True)
@@ -85,12 +85,16 @@ def main():
             else:
                 maps_samples[i].append(InputExample(texts=[x.name for x in [child, parent]]))
 
+    if args['debug']:
+        maps_samples = [x[:50] for x in maps_samples]
+
     for i, argument_map in enumerate(argument_maps):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
         model_save_path = get_model_save_path(model_name, argument_map.label, args['argument_map_dev'],
                                               args['train_on_one_map'],
                                               args['output_dir_label'])
+        logging.info(f'{model_save_path=}')
 
         if args['do_train']:
             word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
