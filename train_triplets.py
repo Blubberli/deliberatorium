@@ -78,8 +78,10 @@ def main():
     maps = list(data_path.glob(f"{args['lang']}_maps/*.json"))
     logging.info(f'processing {len(maps)} maps: ' + str(maps))
     argument_maps = [DeliberatoriumMap(str(_map), _map.stem) for _map in maps]
-    maps_samples = {x.label: [] for x in argument_maps}
 
+    # prepare samples
+    maps_samples = {x.label: [] for x in argument_maps}
+    maps_samples_dev = {x.label: [] for x in argument_maps}
     for i, argument_map in enumerate(argument_maps):
         argument_map_util = Evaluation(argument_map, no_ranks=True)
         for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
@@ -88,13 +90,15 @@ def main():
                     # NOTE original code also adds opposite
                     maps_samples[argument_map.label].append(
                         InputExample(texts=[x.name for x in [child, parent, non_parent]]))
-            else:
-                maps_samples[argument_map.label].append(
-                    InputExample(texts=[x.name for x in [child, parent]]))
-
+            maps_samples_dev[argument_map.label].append(
+                InputExample(texts=[x.name for x in [child, parent]]))
+    if not args['hard_negatives']:
+        maps_samples = maps_samples_dev
     if args['debug_size']:
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
+        maps_samples_dev = {k: x[:(args['debug_size']//5)] for k, x in maps_samples_dev.items()}
 
+    # for each map: train/eval
     for i, argument_map_label in enumerate(maps_samples.keys()):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
@@ -115,7 +119,7 @@ def main():
                 train_maps = [x for k, x in maps_samples.items()
                               if k != argument_map_label and k != args['argument_map_dev']]
                 train_samples = list(itertools.chain(*train_maps))
-            dev_samples = next((x for k, x in maps_samples.items()
+            dev_samples = next((x for k, x in maps_samples_dev.items()
                                 if k == args['argument_map_dev']), [])
 
             logging.info("Training using: {}".format([x.name for x in argument_maps[:i] + argument_maps[i + 1:]]))
