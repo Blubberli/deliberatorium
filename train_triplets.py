@@ -26,7 +26,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--local', type=lambda x: (str(x).lower() == 'true'), default=False)
-    parser.add_argument('--debug', type=lambda x: (str(x).lower() == 'true'), default=True)
+    parser.add_argument('--debug_size', type=int, default=0)
     parser.add_argument('--do_train', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
@@ -38,28 +38,33 @@ def parse_args():
                         type=str, default=None)
     parser.add_argument('--argument_map_dev',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to use as dev",
-                        type=lambda x: (str(x).lower() == 'true'), default=None)
+                        type=str, default=None)
     parser.add_argument('--train_on_one_map',
                         help="either train on `argument_map` and eval on all others or train on all others and evaluate on `argument_map`",
                         type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--hard_negatives', type=lambda x: (str(x).lower() == 'true'), default=True)
     args = vars(parser.parse_args())
-    assert args['argument_map'] in AVAILABLE_MAPS, \
+    assert (not args['argument_map'] or args['argument_map'] in AVAILABLE_MAPS), \
         f"{args['argument_map']=} is not a value from: {', '.join(AVAILABLE_MAPS)}"
     pprint(args)
     return args
 
 
 def get_model_save_path(model_name, map_label, map_label_dev, train_on_one_map, output_dir_label):
-    model_save_path_prefix = 'results/' + model_name.replace("/", "-") + output_dir_label
-    return model_save_path_prefix + ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}' + \
-           (f'-dev-{map_label_dev}' if map_label_dev else '')
+    model_save_path_prefix = 'results/' + model_name.replace("/", "-")
+    return model_save_path_prefix + \
+        (f'-{output_dir_label}' if output_dir_label else '') + \
+        ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}' + \
+        (f'-dev-{map_label_dev}' if map_label_dev else '')
 
 
 def main():
     args = parse_args()
+
+    if args['debug_size'] > 0:
+        logging.info(f"!!!!!!!!!!!!!!! DEBUGGING with {args['debug_size']}")
     
-    if args['argument_map'] == args['argument_map_dev']:
+    if args['argument_map'] and args['argument_map'] == args['argument_map_dev']:
         logging.info('same value for argument_map and argument_map_dev! exiting')
         exit()
     
@@ -73,7 +78,7 @@ def main():
     maps = list(data_path.glob(f"{args['lang']}_maps/*.json"))
     logging.info(f'processing {len(maps)} maps: ' + str(maps))
     argument_maps = [DeliberatoriumMap(str(_map), _map.stem) for _map in maps]
-    maps_samples = [[]] * len(argument_maps)
+    maps_samples = {x.label: [] for x in argument_maps}
 
     for i, argument_map in enumerate(argument_maps):
         argument_map_util = Evaluation(argument_map, no_ranks=True)
@@ -81,20 +86,23 @@ def main():
             if args['hard_negatives']:
                 for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
                     # NOTE original code also adds opposite
-                    maps_samples[i].append(InputExample(texts=[x.name for x in [child, parent, non_parent]]))
+                    maps_samples[argument_map.label].append(
+                        InputExample(texts=[x.name for x in [child, parent, non_parent]]))
             else:
-                maps_samples[i].append(InputExample(texts=[x.name for x in [child, parent]]))
+                maps_samples[argument_map.label].append(
+                    InputExample(texts=[x.name for x in [child, parent]]))
 
-    if args['debug']:
-        maps_samples = [x[:50] for x in maps_samples]
+    if args['debug_size']:
+        maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
 
-    for i, argument_map in enumerate(argument_maps):
+    for i, argument_map_label in enumerate(maps_samples.keys()):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
-        model_save_path = get_model_save_path(model_name, argument_map.label, args['argument_map_dev'],
+        model_save_path = get_model_save_path(model_name, argument_map_label, args['argument_map_dev'],
                                               args['train_on_one_map'],
                                               args['output_dir_label'])
         logging.info(f'{model_save_path=}')
+        logging.getLogger().handlers[0].flush()
 
         if args['do_train']:
             word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
@@ -102,16 +110,16 @@ def main():
             model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
             if args['train_on_one_map']:
-                train_samples = maps_samples[i]
+                train_samples = maps_samples[argument_map_label]
             else:
-                train_maps = [x for x in maps_samples[:i] + maps_samples[i + 1:]
-                              if x.label != args['argument_map_dev']]
+                train_maps = [x for k, x in maps_samples.items()
+                              if k != argument_map_label and k != args['argument_map_dev']]
                 train_samples = list(itertools.chain(*train_maps))
-            dev_samples = next(x for x in maps_samples[:i] + maps_samples[i + 1:]
-                               if x.label == args['argument_map_dev']) if args['argument_map_dev'] else []
+            dev_samples = next((x for k, x in maps_samples.items()
+                                if k == args['argument_map_dev']), [])
 
             logging.info("Training using: {}".format([x.name for x in argument_maps[:i] + argument_maps[i + 1:]]))
-            logging.info("Evaluating using: {}".format(argument_map.name))
+            logging.info("Evaluating using: {}".format(argument_map_label))
             logging.info("Train samples: {}".format(len(train_samples)))
             logging.info("Dev samples: {}".format(len(dev_samples)))
 
@@ -120,7 +128,7 @@ def main():
             train_loss = losses.MultipleNegativesRankingLoss(model)
 
             dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size,
-                                                                             name='sts-dev')
+                                                                             name=args['argument_map_dev'])
 
             # 10% of train data for warm-up
             warmup_steps = math.ceil(len(train_dataloader) * num_epochs * 0.1)
