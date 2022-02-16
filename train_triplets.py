@@ -86,15 +86,18 @@ def main():
     for i, argument_map in enumerate(argument_maps):
         argument_map_util = Evaluation(argument_map, no_ranks=True)
         for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-            if args['hard_negatives']:
+            if args['hard_negatives'] or args['argument_map_dev']:
                 for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
                     # NOTE original code also adds opposite
                     maps_samples[argument_map.label].append(
                         InputExample(texts=[x.name for x in [child, parent, non_parent]]))
+                    maps_samples_dev[argument_map.label].append(
+                        InputExample(texts=[x.name for x in [child, non_parent]], label=0))
+            else:
+                maps_samples[argument_map.label].append(
+                    InputExample(texts=[x.name for x in [child, parent]]))
             maps_samples_dev[argument_map.label].append(
-                InputExample(texts=[x.name for x in [child, parent]]))
-    if not args['hard_negatives']:
-        maps_samples = maps_samples_dev
+                    InputExample(texts=[x.name for x in [child, parent]], label=1))
     if args['debug_size']:
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
         maps_samples_dev = {k: x[:(args['debug_size']//5)] for k, x in maps_samples_dev.items()}
