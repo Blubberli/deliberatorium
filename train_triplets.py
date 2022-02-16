@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
     parser.add_argument('--output_dir_label', type=str)
+    parser.add_argument('--`num_train_epochs`', type=int, default=1)
     parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
@@ -71,7 +72,7 @@ def main():
     model_name = args['model_name_or_path']
     train_batch_size = 128  # The larger you select this, the better the results (usually)
     max_seq_length = 75
-    num_epochs = 1
+    num_epochs = args['num_train_epochs']
 
     data_path = (Path.home() / "data/e-delib/deliberatorium/maps" if args['local'] else
                  Path("/mount/projekte/e-delib/data/deliberatorium/maps"))
@@ -134,6 +135,7 @@ def main():
             dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size,
                                                                              name=args['argument_map_dev'])
 
+            print(f'{len(train_dataloader)=}')
             # 10% of train data for warm-up
             warmup_steps = math.ceil(len(train_dataloader) * num_epochs * 0.1)
             logging.info("Warmup-steps: {}".format(warmup_steps))
