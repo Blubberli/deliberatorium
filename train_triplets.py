@@ -32,7 +32,8 @@ def parse_args():
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
     parser.add_argument('--output_dir_label', type=str)
-    parser.add_argument('--`num_train_epochs`', type=int, default=1)
+    parser.add_argument('--num_train_epochs', type=int, default=1)
+    parser.add_argument('--eval_steps', type=int, default=0)
     parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
@@ -146,7 +147,8 @@ def main():
             model.fit(train_objectives=[(train_dataloader, train_loss)],
                       epochs=num_epochs,
                       evaluator=dev_evaluator,
-                      evaluation_steps=int(len(train_dataloader) * 0.1) if args['argument_map_dev'] else 0,
+                      evaluation_steps=args['eval_steps'] if args['eval_steps'] else
+                      (int(len(train_dataloader) * 0.1) if args['argument_map_dev'] else 0),
                       warmup_steps=warmup_steps,
                       output_path=model_save_path,
                       use_amp=False  # Set to True, if your GPU supports FP16 operations
