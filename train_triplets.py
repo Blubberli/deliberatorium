@@ -1,3 +1,12 @@
+# import tqdm.autonotebook
+#
+#
+# def nop(r, **k):
+#     return range(r)
+#
+#
+# tqdm.autonotebook.trange = nop
+
 import argparse
 import faulthandler
 import itertools
@@ -57,9 +66,9 @@ def parse_args():
 def get_model_save_path(model_name, map_label, map_label_dev, train_on_one_map, output_dir_label):
     model_save_path_prefix = 'results/' + model_name.replace("/", "-")
     return model_save_path_prefix + \
-        (f'-{output_dir_label}' if output_dir_label else '') + \
-        ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}' + \
-        (f'-dev-{map_label_dev}' if map_label_dev else '')
+           (f'-{output_dir_label}' if output_dir_label else '') + \
+           ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}' + \
+           (f'-dev-{map_label_dev}' if map_label_dev else '')
 
 
 def main():
@@ -69,11 +78,11 @@ def main():
 
     if args['debug_size'] > 0:
         logging.info(f"!!!!!!!!!!!!!!! DEBUGGING with {args['debug_size']}")
-    
+
     if args['argument_map'] and args['argument_map'] == args['argument_map_dev']:
         logging.info('same value for argument_map and argument_map_dev! exiting')
         exit()
-    
+
     model_name = args['model_name_or_path']
     train_batch_size = 128  # The larger you select this, the better the results (usually)
     max_seq_length = 75
@@ -102,10 +111,10 @@ def main():
                 maps_samples[argument_map.label].append(
                     InputExample(texts=[x.name for x in [child, parent]]))
             maps_samples_dev[argument_map.label].append(
-                    InputExample(texts=[x.name for x in [child, parent]], label=1))
+                InputExample(texts=[x.name for x in [child, parent]], label=1))
     if args['debug_size']:
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
-        maps_samples_dev = {k: x[:(args['debug_size']//5)] for k, x in maps_samples_dev.items()}
+        maps_samples_dev = {k: x[:(args['debug_size'] // 5)] for k, x in maps_samples_dev.items()}
 
     # for each map: train/eval
     for i, argument_map_label in enumerate(maps_samples.keys()):
@@ -163,6 +172,7 @@ def main():
                                         model_save_path)
             eval_argument_maps = ((argument_maps[:i] + argument_maps[i + 1:]) if args['train_on_one_map'] else
                                   [argument_maps[i]])
+            eval_argument_maps = [argument_maps[i]]
 
             results_path = Path(model_save_path + '-results')
             results_path.mkdir(exist_ok=True)
