@@ -33,7 +33,7 @@ def parse_args():
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
     parser.add_argument('--output_dir_label', type=str)
     parser.add_argument('--num_train_epochs', type=int, default=1)
-    parser.add_argument('--eval_steps', type=int, default=0)
+    parser.add_argument('--eval_steps', type=int, default=1000)
     parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
@@ -87,14 +87,14 @@ def main():
     for i, argument_map in enumerate(argument_maps):
         argument_map_util = Evaluation(argument_map, no_ranks=True)
         for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-            if args['hard_negatives'] or args['argument_map_dev']:
-                for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
+            for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
+                if args['hard_negatives']:
                     # NOTE original code also adds opposite
                     maps_samples[argument_map.label].append(
                         InputExample(texts=[x.name for x in [child, parent, non_parent]]))
-                    maps_samples_dev[argument_map.label].append(
-                        InputExample(texts=[x.name for x in [child, non_parent]], label=0))
-            else:
+                maps_samples_dev[argument_map.label].append(
+                    InputExample(texts=[x.name for x in [child, non_parent]], label=0))
+            if not args['hard_negatives']:
                 maps_samples[argument_map.label].append(
                     InputExample(texts=[x.name for x in [child, parent]]))
             maps_samples_dev[argument_map.label].append(
