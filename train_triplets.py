@@ -1,8 +1,10 @@
 import argparse
+import faulthandler
 import itertools
 import json
 import logging
 import math
+import signal
 from pathlib import Path
 from pprint import pprint
 
@@ -61,6 +63,8 @@ def get_model_save_path(model_name, map_label, map_label_dev, train_on_one_map, 
 
 
 def main():
+    faulthandler.register(signal.SIGUSR1.value)
+
     args = parse_args()
 
     if args['debug_size'] > 0:
