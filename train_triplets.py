@@ -113,6 +113,7 @@ def main():
             maps_samples_dev[argument_map.label].append(
                 InputExample(texts=[x.name for x in [child, parent]], label=1))
     if args['debug_size']:
+        print('DEBUG!!!!!!!!!!!!!')
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
         maps_samples_dev = {k: x[:(args['debug_size'] // 5)] for k, x in maps_samples_dev.items()}
 
