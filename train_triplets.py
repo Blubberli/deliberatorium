@@ -140,8 +140,9 @@ def main():
             train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=train_batch_size)
             train_loss = losses.MultipleNegativesRankingLoss(model)
 
-            dev_evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, batch_size=train_batch_size,
-                                                                             name=args['argument_map_dev'])
+            dev_evaluator = (EmbeddingSimilarityEvaluator.from_input_examples(
+                dev_samples, batch_size=train_batch_size, name=args['argument_map_dev'])
+                             if args['argument_map_dev'] else None)
 
             print(f'{len(train_dataloader)=}')
             # 10% of train data for warm-up
