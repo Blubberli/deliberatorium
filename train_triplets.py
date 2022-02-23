@@ -38,6 +38,7 @@ def parse_args():
     parser.add_argument('--train_batch_size', type=int, default=64)
     parser.add_argument('--eval_steps', type=int, default=1000)
     parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
+    parser.add_argument('--use_descriptions', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
                         type=str, default=None)
@@ -169,11 +170,12 @@ def main():
             results_path = Path(model_save_path + '-results')
             results_path.mkdir(exist_ok=True)
 
+            encoder_mulitlingual = MapEncoder(max_seq_len=128,
+                                              sbert_model_identifier=None,
+                                              model=model,
+                                              normalize_embeddings=True, use_descriptions=args['use_descriptions'])
+
             for eval_argument_map in eval_argument_maps:
-                encoder_mulitlingual = MapEncoder(max_seq_len=128,
-                                                  sbert_model_identifier=None,
-                                                  model=model,
-                                                  normalize_embeddings=True, use_descriptions=False)
                 results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
                 (results_path / f'{eval_argument_map.label}.json').write_text(json.dumps(results))
 
