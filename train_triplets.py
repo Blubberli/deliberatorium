@@ -8,6 +8,8 @@ import signal
 from pathlib import Path
 from pprint import pprint
 
+import pandas as pd
+import wandb
 from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample
 from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
@@ -119,6 +121,12 @@ def main():
         logging.info(f'{model_save_path=}')
         logging.getLogger().handlers[0].flush()
 
+        wandb.init(project='argument-maps', name=model_save_path,
+                   # to fix "Error communicating with wandb process"
+                   # see https://docs.wandb.ai/guides/track/launch#init-start-error
+                   settings=wandb.Settings(start_method="fork"))
+        wandb.config.update(args)
+
         if args['do_train']:
             word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
             pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
@@ -178,6 +186,7 @@ def main():
             for eval_argument_map in eval_argument_maps:
                 results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
                 (results_path / f'{eval_argument_map.label}.json').write_text(json.dumps(results))
+                wandb.log(pd.json_normalize({eval_argument_map.label: results}, sep='_').to_dict(orient='records')[0])
 
 
 if __name__ == '__main__':
