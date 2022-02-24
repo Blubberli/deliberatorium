@@ -186,7 +186,8 @@ def main():
             for eval_argument_map in eval_argument_maps:
                 results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
                 (results_path / f'{eval_argument_map.label}.json').write_text(json.dumps(results))
-                wandb.log(pd.json_normalize({eval_argument_map.label: results}, sep='_').to_dict(orient='records')[0])
+                wandb.log({eval_argument_map.label: results})
+                wandb.log(results)
 
 
 if __name__ == '__main__':
