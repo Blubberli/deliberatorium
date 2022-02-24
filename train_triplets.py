@@ -8,7 +8,6 @@ import signal
 from pathlib import Path
 from pprint import pprint
 
-import pandas as pd
 import wandb
 from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample
 from sentence_transformers import models, losses, datasets
@@ -35,6 +34,7 @@ def parse_args():
     parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
+    parser.add_argument('--output_dir_prefix', type=str, default=None)
     parser.add_argument('--output_dir_label', type=str)
     parser.add_argument('--num_train_epochs', type=int, default=1)
     parser.add_argument('--train_batch_size', type=int, default=64)
@@ -58,12 +58,13 @@ def parse_args():
     return args
 
 
-def get_model_save_path(model_name, map_label, map_label_dev, train_on_one_map, output_dir_label):
-    model_save_path_prefix = 'results/' + model_name.replace("/", "-")
+def get_model_save_path(model_name, map_label, args):
+    model_save_path_prefix = 'results/' + (f'{args["output_dir_prefix"]}/' if args['output_dir_prefix'] else '')\
+                             + model_name.replace("/", "-")
     return model_save_path_prefix + \
-        (f'-{output_dir_label}' if output_dir_label else '') + \
-        ('-trained' if train_on_one_map else '-evaluated') + f'-on-{map_label}' + \
-        (f'-dev-{map_label_dev}' if map_label_dev else '')
+        (f'-{args["output_dir_label"]}' if args['output_dir_label'] else '') + \
+        ('-trained' if args['train_on_one_map'] else '-evaluated') + f'-on-{map_label}' + \
+        (f'-dev-{args["argument_map_dev"]}' if args['argument_map_dev'] else '')
 
 
 def main():
@@ -115,9 +116,7 @@ def main():
     for i, argument_map_label in enumerate(maps_samples.keys()):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
-        model_save_path = get_model_save_path(model_name, argument_map_label, args['argument_map_dev'],
-                                              args['train_on_one_map'],
-                                              args['output_dir_label'])
+        model_save_path = get_model_save_path(model_name, argument_map_label, args)
         logging.info(f'{model_save_path=}')
         logging.getLogger().handlers[0].flush()
 
