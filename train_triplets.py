@@ -171,8 +171,6 @@ def main():
         if args['do_eval']:
             model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
                                         model_save_path)
-            eval_argument_maps = ((argument_maps[:i] + argument_maps[i + 1:]) if args['train_on_one_map'] else
-                                  [argument_maps[i]])
 
             results_path = Path(model_save_path + '-results')
             results_path.mkdir(exist_ok=True)
@@ -182,11 +180,17 @@ def main():
                                               model=model,
                                               normalize_embeddings=True, use_descriptions=args['use_descriptions'])
 
-            for eval_argument_map in eval_argument_maps:
+            for j, eval_argument_map in enumerate(argument_maps):
+                train_eval = (args['train_on_one_map'] and i == j) or (not args['train_on_one_map'] and i != j)
                 results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
-                (results_path / f'{eval_argument_map.label}.json').write_text(json.dumps(results))
+                (results_path / f'{eval_argument_map.label}{"-train" if train_eval else ""}.json').\
+                    write_text(json.dumps(results))
                 wandb.log({eval_argument_map.label: results})
                 wandb.log(results)
+                # TODO add dev
+                split = 'train' if train_eval else 'test'
+                wandb.log({split: {eval_argument_map.label: results}})
+                wandb.log({split: results})
 
 
 if __name__ == '__main__':
