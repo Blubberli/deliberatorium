@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument('--debug_size', type=int, default=0)
     parser.add_argument('--do_train', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
+    parser.add_argument('--eval_not_trained', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
     parser.add_argument('--output_dir_prefix', type=str, default=None)
@@ -58,9 +59,11 @@ def parse_args():
     return args
 
 
-def get_model_save_path(model_name, map_label, args):
+def get_model_save_path(model_name, args, map_label=None):
     model_save_path_prefix = 'results/' + (f'{args["output_dir_prefix"]}/' if args['output_dir_prefix'] else '')\
                              + model_name.replace("/", "-")
+    if not map_label:
+        return model_save_path_prefix
     return model_save_path_prefix + \
         (f'-{args["output_dir_label"]}' if args['output_dir_label'] else '') + \
         ('-trained' if args['train_on_one_map'] else '-evaluated') + f'-on-{map_label}' + \
@@ -89,6 +92,17 @@ def main():
     maps = list(data_path.glob(f"{args['lang']}_maps/*.json"))
     logging.info(f'processing {len(maps)} maps: ' + str(maps))
     argument_maps = [DeliberatoriumMap(str(_map), _map.stem) for _map in maps]
+    
+    if args['eval_not_trained']:
+        logging.info('eval all arguments as not part of training data')
+        save_path = get_model_save_path(args['eval_model_name_or_path'], args)
+        wandb.init(project='argument-maps', name=save_path,
+                   # to fix "Error communicating with wandb process"
+                   # see https://docs.wandb.ai/guides/track/launch#init-start-error
+                   settings=wandb.Settings(start_method="fork"))
+        wandb.config.update(args)
+        eval(save_path, args, argument_maps)
+        exit()
 
     # prepare samples
     maps_samples = {x.label: [] for x in argument_maps}
@@ -116,7 +130,7 @@ def main():
     for i, argument_map_label in enumerate(maps_samples.keys()):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
-        model_save_path = get_model_save_path(model_name, argument_map_label, args)
+        model_save_path = get_model_save_path(model_name, args, argument_map_label)
         logging.info(f'{model_save_path=}')
         logging.getLogger().handlers[0].flush()
 
@@ -169,28 +183,31 @@ def main():
                       )
         # eval
         if args['do_eval']:
-            model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
-                                        model_save_path)
+            eval(model_save_path, args, argument_maps, i)
 
-            results_path = Path(model_save_path + '-results')
-            results_path.mkdir(exist_ok=True)
 
-            encoder_mulitlingual = MapEncoder(max_seq_len=128,
-                                              sbert_model_identifier=None,
-                                              model=model,
-                                              normalize_embeddings=True, use_descriptions=args['use_descriptions'])
-
-            for j, eval_argument_map in enumerate(argument_maps):
-                train_eval = (args['train_on_one_map'] and i == j) or (not args['train_on_one_map'] and i != j)
-                results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
-                (results_path / f'{eval_argument_map.label}{"-train" if train_eval else ""}.json').\
-                    write_text(json.dumps(results))
-                wandb.log({eval_argument_map.label: results})
-                wandb.log(results)
-                # TODO add dev
-                split = 'train' if train_eval else 'test'
-                wandb.log({split: {eval_argument_map.label: results}})
-                wandb.log({split: results})
+def eval(output_dir, args, argument_maps, training_map_index=-1):
+    model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
+                                output_dir)
+    results_path = Path(output_dir + '-results')
+    results_path.mkdir(exist_ok=True, parents=True)
+    encoder_mulitlingual = MapEncoder(max_seq_len=128,
+                                      sbert_model_identifier=None,
+                                      model=model,
+                                      normalize_embeddings=True, use_descriptions=args['use_descriptions'])
+    for j, eval_argument_map in enumerate(argument_maps):
+        train_eval = ((args['train_on_one_map'] and training_map_index == j) or
+                      (not args['train_on_one_map'] and training_map_index != j)
+                      and training_map_index >= 0)
+        results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
+        (results_path / f'{eval_argument_map.label}{"-train" if train_eval else ""}.json'). \
+            write_text(json.dumps(results))
+        wandb.log({eval_argument_map.label: results})
+        wandb.log(results)
+        # TODO add dev
+        split = 'train' if train_eval else 'test'
+        wandb.log({split: {eval_argument_map.label: results}})
+        wandb.log({split: results})
 
 
 if __name__ == '__main__':
