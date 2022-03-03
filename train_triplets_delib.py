@@ -30,6 +30,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--local', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--debug_size', type=int, default=0)
+    parser.add_argument('--debug_maps_size', type=int, default=0)
     parser.add_argument('--do_train', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--eval_not_trained', type=lambda x: (str(x).lower() == 'true'), default=False)
@@ -56,6 +57,17 @@ def parse_args():
     assert (not args['argument_map'] or args['argument_map'] in AVAILABLE_MAPS), \
         f"{args['argument_map']=} is not a value from: {', '.join(AVAILABLE_MAPS)}"
     pprint(args)
+
+    if args['debug_size'] > 0:
+        logging.info(f"!!!!!!!!!!!!!!! DEBUGGING with {args['debug_size']} samples")
+
+    if args['debug_maps_size'] > 0:
+        logging.info(f"!!!!!!!!!!!!!!! DEBUGGING with {args['debug_maps_size']} maps")
+
+    if args['argument_map'] and args['argument_map'] == args['argument_map_dev']:
+        logging.info('same value for argument_map and argument_map_dev! exiting')
+        exit()
+
     return args
 
 
@@ -74,13 +86,6 @@ def main():
     faulthandler.register(signal.SIGUSR1.value)
 
     args = parse_args()
-
-    if args['debug_size'] > 0:
-        logging.info(f"!!!!!!!!!!!!!!! DEBUGGING with {args['debug_size']}")
-    
-    if args['argument_map'] and args['argument_map'] == args['argument_map_dev']:
-        logging.info('same value for argument_map and argument_map_dev! exiting')
-        exit()
     
     model_name = args['model_name_or_path']
     train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
