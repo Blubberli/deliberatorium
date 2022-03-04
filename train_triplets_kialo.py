@@ -55,26 +55,6 @@ def main():
     argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=42)
     logging.info(f'train/eval using {len(argument_maps_train)=} {len(argument_maps_test)=}')
 
-    # prepare samples
-    maps_samples = {x.label: [] for x in argument_maps_train}
-    # maps_samples_dev = {x.label: [] for x in argument_maps}
-    for i, argument_map in enumerate(argument_maps_train):
-        argument_map_util = Evaluation(argument_map, no_ranks=True)
-        for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-            if args['hard_negatives']:
-                non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
-                if len(non_parents) > args['hard_negatives_size'] > 0:
-                    non_parents = random.sample(non_parents, args['hard_negatives_size'])
-                for non_parent in non_parents:
-                    # NOTE original code also adds opposite
-                    maps_samples[argument_map.label].append(
-                        InputExample(texts=[x.name for x in [child, parent, non_parent]]))
-            else:
-                maps_samples[argument_map.label].append(
-                    InputExample(texts=[x.name for x in [child, parent]]))
-    if args['debug_size']:
-        maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
-
     model_save_path = get_model_save_path(model_name, args)
     logging.info(f'{model_save_path=}')
     logging.getLogger().handlers[0].flush()
@@ -88,6 +68,27 @@ def main():
     wandb.config.update(args)
 
     if args['do_train']:
+
+        # prepare samples
+        maps_samples = {x.label: [] for x in argument_maps_train}
+        # maps_samples_dev = {x.label: [] for x in argument_maps}
+        for i, argument_map in enumerate(argument_maps_train):
+            argument_map_util = Evaluation(argument_map, no_ranks=True)
+            for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
+                if args['hard_negatives']:
+                    non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
+                    if len(non_parents) > args['hard_negatives_size'] > 0:
+                        non_parents = random.sample(non_parents, args['hard_negatives_size'])
+                    for non_parent in non_parents:
+                        # NOTE original code also adds opposite
+                        maps_samples[argument_map.label].append(
+                            InputExample(texts=[x.name for x in [child, parent, non_parent]]))
+                else:
+                    maps_samples[argument_map.label].append(
+                        InputExample(texts=[x.name for x in [child, parent]]))
+        if args['debug_size']:
+            maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
+
         word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
         pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
         model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
