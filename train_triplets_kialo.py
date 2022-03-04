@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+import random
 import signal
 from pathlib import Path
 
@@ -60,12 +61,15 @@ def main():
     for i, argument_map in enumerate(argument_maps_train):
         argument_map_util = Evaluation(argument_map, no_ranks=True)
         for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-            for non_parent in [x for x in argument_map_util.parent_nodes if x != parent]:
-                if args['hard_negatives']:
+            if args['hard_negatives']:
+                non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
+                if len(non_parents) > args['hard_negatives_size'] > 0:
+                    non_parents = random.sample(non_parents, args['hard_negatives_size'])
+                for non_parent in non_parents:
                     # NOTE original code also adds opposite
                     maps_samples[argument_map.label].append(
                         InputExample(texts=[x.name for x in [child, parent, non_parent]]))
-            if not args['hard_negatives']:
+            else:
                 maps_samples[argument_map.label].append(
                     InputExample(texts=[x.name for x in [child, parent]]))
     if args['debug_size']:

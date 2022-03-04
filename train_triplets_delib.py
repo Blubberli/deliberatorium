@@ -53,6 +53,7 @@ def parse_args():
                         help="either train on `argument_map` and eval on all others or train on all others and evaluate on `argument_map`",
                         type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--hard_negatives', type=lambda x: (str(x).lower() == 'true'), default=True)
+    parser.add_argument('--hard_negatives_size', type=int, default=-1)
     args = vars(parser.parse_args())
     assert (not args['argument_map'] or args['argument_map'] in AVAILABLE_MAPS), \
         f"{args['argument_map']=} is not a value from: {', '.join(AVAILABLE_MAPS)}"
