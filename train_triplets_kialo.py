@@ -127,15 +127,21 @@ def eval(output_dir, args, argument_maps):
                                       model=model,
                                       normalize_embeddings=True)
     all_results = []
-    for j, eval_argument_map in enumerate(argument_maps):
-        train_eval = False
-        results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"Pro", "Con"})
-        (results_path / f'{eval_argument_map.label}{"-train" if train_eval else ""}.json'). \
-            write_text(json.dumps(results))
-        split = 'train' if train_eval else 'test'
-        wandb.log({split: {eval_argument_map.label: results}})
-        wandb.log({split: results})
-        all_results.append(results)
+    maps_all_results = {}
+    try:
+        for j, eval_argument_map in enumerate(argument_maps):
+            results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"Pro", "Con"})
+            maps_all_results[eval_argument_map.label] = results
+            all_results.append(results)
+    except Exception as e:
+        (results_path / f'all_maps.json').write_text(json.dumps(maps_all_results))
+        wandb.log({'test': maps_all_results})
+        wandb.log({'test': all_results})
+        data = [[map_name.rsplit('-', 1)[-1], v] for map_name, v in maps_all_results.items()]
+        table = wandb.Table(data=data, columns=["map id", "scores"])
+        wandb.log({'test': {'detailed': wandb.plot.line(
+            table, "map id", "score", title="Detailed results per map id")}})
+        raise e
 
     avg_results = {
         key: {inner_key: sum(entry[key][inner_key] for entry in all_results) / len(all_results) for inner_key in value}
