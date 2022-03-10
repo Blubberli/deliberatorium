@@ -68,7 +68,10 @@ def main():
         #                         for domain in main2subtopic}
         domain_argument_maps = {domain: [] for domain in main2subtopic}
         for argument_map in argument_maps:
-            domain_argument_maps[maps2uniquetopic[argument_map.name]].append(argument_map)
+            if argument_map.name in maps2uniquetopic:
+                domain_argument_maps[maps2uniquetopic[argument_map.name]].append(argument_map)
+            else:
+                logging.warning(argument_map.name, ' skipped!')
         print(f'{len(domain_argument_maps)=}')
         argument_maps = domain_argument_maps[main_domains[args['training_domain_index']]]
         args['training_domain'] = main_domains[args['training_domain_index']]
@@ -173,7 +176,7 @@ def eval(output_dir, args, argument_maps, domain):
         key: {inner_key: sum(entry[key][inner_key] for entry in all_results) / len(all_results) for inner_key in value}
         for key, value in all_results[0].items()}
     (results_path / f'-avg.json').write_text(json.dumps(avg_results))
-    wandb.log({'test': {'domain': {'avg': avg_results}}})
+    wandb.log({'test': {domain: {'avg': avg_results}}})
 
 
 if __name__ == '__main__':
