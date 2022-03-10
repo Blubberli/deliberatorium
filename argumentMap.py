@@ -23,7 +23,7 @@ class ArgumentMap(ABC):
         self.label = label
         self.data = self.load_data(data_path)
         self.id = self.data["id"]
-        self.name = self.data["name"]
+        self.name = self.data["name"].strip()
         self.direct_children = self.init_children()
         all_children = []
         # create a list that stores all nodes of a map by iterating through the first level of nodes

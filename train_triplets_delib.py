@@ -26,7 +26,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     handlers=[LoggingHandler()])
 
 
-def parse_args():
+def parse_args(add_more_args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--local', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--debug_size', type=int, default=0)
@@ -52,6 +52,8 @@ def parse_args():
     parser.add_argument('--train_on_one_map',
                         help="either train on `argument_map` and eval on all others or train on all others and evaluate on `argument_map`",
                         type=lambda x: (str(x).lower() == 'true'), default=False)
+    if add_more_args:
+        add_more_args(parser)
     parser.add_argument('--hard_negatives', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--hard_negatives_size', type=int, default=-1)
     args = vars(parser.parse_args())

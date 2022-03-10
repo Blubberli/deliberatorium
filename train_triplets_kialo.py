@@ -1,5 +1,4 @@
 import faulthandler
-import faulthandler
 import itertools
 import json
 import logging
@@ -13,11 +12,13 @@ import wandb
 from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample
 from sentence_transformers import models, losses, datasets
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 from argumentMap import KialoMap
 from baseline import evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
+from kialo_domains_util import get_maps2uniquetopic
 from train_triplets_delib import parse_args, get_model_save_path
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
@@ -28,11 +29,15 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     handlers=[LoggingHandler()])
 
 
+def add_more_args(parser):
+    parser.add_argument('--training_domain_index', type=int, default=-1)
+
+
 def main():
     faulthandler.register(signal.SIGUSR1.value)
 
-    args = parse_args()
-    
+    args = parse_args(add_more_args)
+
     model_name = args['model_name_or_path']
     train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
     max_seq_length = 75
@@ -46,10 +51,24 @@ def main():
         maps = sorted(maps, key=os.path.getsize)
         maps = maps[:args['debug_maps_size']]
 
-    logging.info(f'processing {len(maps)} maps')
-    # some maps seem to be duplicates with (1) in name
-    argument_maps = [KialoMap(str(_map), _map.stem) for _map in maps if '(1)' not in _map.stem]
+    argument_maps = [KialoMap(str(_map), _map.stem) for _map in tqdm(maps, f'processing maps')
+                     # some maps seem to be duplicates with (1) in name
+                     if '(1)' not in _map.stem]
     logging.info(f'remaining {len(maps)} maps after clean up')
+
+    # kialo domains
+    if args['training_domain_index'] >= 0:
+        maps2uniquetopic, (_, _, main2subtopic) = get_maps2uniquetopic('data/kialomaps2maintopics.tsv',
+                                                                       'data/kialo_domains.tsv')
+
+        # domain_argument_maps = {domain: [KialoMap(str(data_path / (map_name + '.txt')), map_name)
+        #                                  for map_name, map_domain in maps2uniquetopic.items() if map_domain == domain]
+        #                         for domain in main2subtopic}
+        domain_argument_maps = {domain: [] for domain in main2subtopic}
+        for argument_map in argument_maps:
+            domain_argument_maps[maps2uniquetopic[argument_map.name]].append(argument_map)
+        print(f'{len(domain_argument_maps)=}')
+        argument_maps = list(domain_argument_maps.values())[0]
 
     # split data
     argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=42)
