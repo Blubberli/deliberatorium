@@ -57,9 +57,11 @@ def main():
     logging.info(f'remaining {len(maps)} maps after clean up')
 
     # kialo domains
+    main_domains = []
     if args['training_domain_index'] >= 0:
         maps2uniquetopic, (_, _, main2subtopic) = get_maps2uniquetopic('data/kialomaps2maintopics.tsv',
                                                                        'data/kialo_domains.tsv')
+        main_domains = list(main2subtopic.keys())
 
         # domain_argument_maps = {domain: [KialoMap(str(data_path / (map_name + '.txt')), map_name)
         #                                  for map_name, map_domain in maps2uniquetopic.items() if map_domain == domain]
@@ -68,7 +70,8 @@ def main():
         for argument_map in argument_maps:
             domain_argument_maps[maps2uniquetopic[argument_map.name]].append(argument_map)
         print(f'{len(domain_argument_maps)=}')
-        argument_maps = list(domain_argument_maps.values())[0]
+        argument_maps = domain_argument_maps[main_domains[args['training_domain_index']]]
+        args['training_domain'] = main_domains[args['training_domain_index']]
 
     # split data
     argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=42)
@@ -133,13 +136,17 @@ def main():
                   )
     # eval
     if args['do_eval']:
-        eval(model_save_path, args, argument_maps_test)
+        eval(model_save_path, args, argument_maps_test,
+             domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all')
+        if args['training_domain_index'] >= 0:
+            for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
+                eval(model_save_path, args, argument_maps_test, domain=domain)
 
 
-def eval(output_dir, args, argument_maps):
+def eval(output_dir, args, argument_maps, domain):
     model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
                                 output_dir)
-    results_path = Path(output_dir + '-results')
+    results_path = Path(output_dir + '-results') / domain
     results_path.mkdir(exist_ok=True, parents=True)
     encoder_mulitlingual = MapEncoder(max_seq_len=128,
                                       sbert_model_identifier=None,
@@ -166,7 +173,7 @@ def eval(output_dir, args, argument_maps):
         key: {inner_key: sum(entry[key][inner_key] for entry in all_results) / len(all_results) for inner_key in value}
         for key, value in all_results[0].items()}
     (results_path / f'-avg.json').write_text(json.dumps(avg_results))
-    wandb.log({'test': {'avg': avg_results}})
+    wandb.log({'test': {'domain': {'avg': avg_results}}})
 
 
 if __name__ == '__main__':
