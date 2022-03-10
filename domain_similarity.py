@@ -13,7 +13,6 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 # define the POS tags of content words (vs function words)
 CONTENTWORD_POSTAGS = {"noun", "verb", "adj", "propn", "adv"}
 IT_MAPS = {"Doparia sulla legge elettorale (m1)", "Doparia sulla legge elettorale (m2)", "Naples Biofuels Discussion"}
@@ -181,25 +180,164 @@ def tag_headmap_kialo(path_kialo2topics, n, outpath, cut_most_frequent=False):
     plt.savefig(outpath, dpi=1500)
 
 
-def create_domains(path_kialo2topics, outpath):
-    topics = pd.read_csv(path_kialo2topics, sep="\t")
-    topics.dropna(inplace=True)
-    topics["topic_tags"] = [[w.strip().lower() for w in el.split(",")] for el in topics.topics.values]
-    top50 = dict(Counter(itertools.chain(*topics.topic_tags.values)).most_common(50))
-    vocab = list(top50.keys())
-    vocab = vocab[10:]
+def get_subtopic_to_parent(maintopics):
+    sutop2maintop = {}
+    main_tops = pd.read_csv(maintopics, sep="\t")
+    for index, row in main_tops.iterrows():
+        maintopic = row.maintopic
+        subtopics = row.subtopics.split(",")
+        subtopics = [el.strip() for el in subtopics]
+        for subtopic in subtopics:
+            sutop2maintop[subtopic] = maintopic
+            sutop2maintop[maintopic] = maintopic
+    return sutop2maintop
+
+
+def get_map2main_topic(maps2topics, sub2maintopic):
+    """
+    Get the dictionary of each map to its maintopic(s)
+    :param maps2topics: dictionary with each map and all its topics
+    :param sub2maintopic: dictionary with all subtopics and their parent topic
+    """
+    maps_without_maintopic = []
+    map2maintopic = defaultdict(list)
+    for map_name, topic_tags in maps2topics.items():
+        maintopic = None
+        for tag in topic_tags:
+            if tag in sub2maintopic:
+                maintopic = sub2maintopic[tag]
+                map2maintopic[map_name].append(maintopic)
+        if not maintopic:
+            maps_without_maintopic.append(map_name)
+    print("%d maps do not have a main topic" % len(maps_without_maintopic))
+    return map2maintopic, maps_without_maintopic
+
+
+def main_domains(path_kialo2topics, maintopics):
+    maps2topics = get_map2topics(path_kialo2topics)
+    print(len(maps2topics))
+    sub2maintopic = get_subtopic_to_parent(maintopics)
+    maps2maintopic, left_maps = get_map2main_topic(maps2topics, sub2maintopic)
+    print("%d of the maps  have topic tag(s)" % len(maps2maintopic))
+    print(maps2maintopic)
+    map2unique = get_unique_label(maps2maintopic)
+    word_frequency = Counter(map2unique.values()).most_common()
+    words = [word for word, _ in word_frequency]
+    counts = [counts for _, counts in word_frequency]
+    plt.barh(words, counts)
+    plt.title("distribution of unique domains")
+    plt.ylabel("number of maps")
+    plt.xlabel("Domains")
+    plt.tight_layout()
+    plt.savefig("data/plots/distribution_domains2.png", dpi=1500)
+
+    #heat_map(vocab=list(set(sub2maintopic.values())), map2topics=maps2maintopic,
+    #         out_path="data/plots/main_topics_heatmap.png")
+
+def kialo_maps2topic(path_kialo2topics, maintopics):
+    maps2topics = get_map2topics(path_kialo2topics)
+    print(len(maps2topics))
+    sub2maintopic = get_subtopic_to_parent(maintopics)
+    maps2maintopic, left_maps = get_map2main_topic(maps2topics, sub2maintopic)
+    print("%d of the maps  have topic tag(s)" % len(maps2maintopic))
+    print(maps2maintopic)
+    map2unique = get_unique_label(maps2maintopic)
+    kialomaps, _ = read_all_maps()
+    topic2numberofnodes = defaultdict(int)
+    smallest = 1000
+    for mapname, topic in map2unique.items():
+        if mapname not in kialomaps:
+            print(mapname)
+        else:
+            map = kialomaps[mapname]
+            nodes = map.number_of_children()
+            if map.number_of_children() < smallest:
+                smallest = map.number_of_children()
+                smalles_map = mapname
+            topic2numberofnodes[topic]+=nodes
+    print(smalles_map)
+    print(smallest)
+    print(topic2numberofnodes)
+    topic2numberofnodes = {k: v for k, v in sorted(topic2numberofnodes.items(), key=lambda item: item[1])}
+    plt.barh(list(topic2numberofnodes.keys()), list(topic2numberofnodes.values()))
+    plt.title("number of nodes per domain")
+    plt.ylabel("domain")
+    plt.xlabel("number of nodes")
+    plt.tight_layout()
+    plt.savefig("data/plots/node_distribution_domains.png", dpi=1500)
+
+
+def get_unique_label(maps2maintopics):
+    topic_frequency = Counter(itertools.chain(*[set(el) for el in maps2maintopics.values()]))
+    map2unique_topic = {}
+    for map, maintopics in maps2maintopics.items():
+        if len(set(maintopics))>1:
+            most_common = Counter(maintopics).most_common(2)
+            if most_common[0][1] != most_common[1][1]:
+                label = most_common[0][0]
+            else:
+                min_freq = 1000
+                label = ""
+                for topic in set(maintopics):
+                    freq = topic_frequency[topic]
+                    if freq < min_freq:
+                        min_freq = freq
+                        label = topic
+            map2unique_topic[map] = label
+        else:
+            map2unique_topic[map] = maintopics[0]
+    return map2unique_topic
+
+def heat_map(vocab, map2topics, out_path):
+    """
+    Create a heat map of co-ocurrences of topics
+    :param vocab: the topics to be considered
+    :param map_topics: a dictionary with a map name and the corresponding topics
+    :param out_path: the path to save the heatmap to
+    """
+    vocab_matrix, _ = get_cooccurrence_matrix(vocab, map2topics)
+    sns.set(font_scale=0.5)
+    sns.heatmap(vocab_matrix, xticklabels=vocab, yticklabels=vocab)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=1500)
+
+
+def get_cooccurrence_matrix(vocab, map2topics):
+    """
+    Retrieve a co-ocurrence matrix of joint frequency of topic tags
+    :param vocab: the vocabulary to consider for the matrix
+    :param map2topics: all maps with their corresponding topics
+    :return: the co-occ. matrix and the word2index
+    """
     vocab_matrix = np.zeros(shape=[len(vocab), len(vocab)])
     vocab2index = dict(zip(vocab, range(len(vocab))))
-    index2vocab = dict(zip(range(len(vocab)), vocab))
-    for map_tags in topics.topic_tags.values:
-        for tag1 in map_tags:
+    for map_name, map_topics in map2topics.items():
+        for tag1 in map_topics:
             if tag1 in vocab2index:
                 index1 = vocab2index[tag1]
-            for tag2 in map_tags:
+            for tag2 in map_topics:
                 if tag2 in vocab2index:
                     index2 = vocab2index[tag2]
                     if index1 != index2:
                         vocab_matrix[index1][index2] += 1
+    return vocab_matrix, vocab2index
+
+
+def get_map2topics(path_kialo2topics):
+    """Returns a dictionary of mapname with the corresponding topics"""
+    topics = pd.read_csv(path_kialo2topics, sep="\t")
+    topics.dropna(inplace=True)
+    topics["topic_tags"] = [[w.strip().lower() for w in el.split(",")] for el in topics.topics.values]
+    return dict(zip(topics.name, topics.topic_tags))
+
+
+def create_domains(path_kialo2topics, outpath):
+    map2topics = get_map2topics(path_kialo2topics)
+    top50 = dict(Counter(itertools.chain(*map2topics.values())).most_common(50))
+    vocab = list(top50.keys())
+    vocab = vocab[10:]
+    vocab_matrix, vocab2index = get_cooccurrence_matrix(vocab, map2topics)
+    index2vocab = dict(zip(range(len(vocab)), vocab))
     wordjointwords = defaultdict(set)
     # collect co-ocurrences of <= 15
     for i in range(len(vocab)):
@@ -224,41 +362,14 @@ def create_domains(path_kialo2topics, outpath):
                     word2replacement[k] = "/".join(sorted(list(v)))
     replaced_vocab = list(set([word2replacement[w] if w in word2replacement else w for w in vocab]))
     print("reduced vocab is %d" % len(replaced_vocab))
-    vocab_matrix = np.zeros(shape=[len(replaced_vocab), len(replaced_vocab)])
-    vocab2index = dict(zip(replaced_vocab, range(len(replaced_vocab))))
-    for map_tags in topics.topic_tags.values:
-        for tag1 in map_tags:
-            if tag1 in word2replacement:
-                tag1 = word2replacement[tag1]
-            if tag1 in vocab2index:
-                index1 = vocab2index[tag1]
-            for tag2 in map_tags:
-                if tag2 in word2replacement:
-                    tag2 = word2replacement[tag2]
-                if tag2 in vocab2index:
-                    index2 = vocab2index[tag2]
-                    if index1 != index2:
-                        vocab_matrix[index1][index2] += 1
-    # plot heat map
-    sns.set(font_scale=0.5)
-    ax = sns.heatmap(vocab_matrix, xticklabels=replaced_vocab, yticklabels=replaced_vocab)
-    plt.tight_layout()
-    plt.savefig(outpath, dpi=1500)
+    heat_map(vocab=replaced_vocab, map2topics=map2topics, out_path=outpath)
 
 
-def most_frequent_50topics(path_kialo2topics, n):
+def most_frequent_topics(path_kialo2topics, n):
     """Plot the most frequent topic tags with their frequency"""
-    topics = pd.read_csv(path_kialo2topics, sep="\t")
-    topics.dropna(inplace=True)
-    topic_words = topics['topics'].values
-    all_words = []
-    for el in topic_words:
-        words = el.split(",")
-        words = [w.strip() for w in words]
-        words = [w.lower() for w in words]
-        for w in words:
-            all_words.append(w)
-    word_frequency = Counter(all_words).most_common(n)
+    maps2topics = get_map2topics(path_kialo2topics)
+    all_topics = itertools.chain(*maps2topics.values())
+    word_frequency = Counter(all_topics).most_common(n)
     words = [word for word, _ in word_frequency]
     counts = [counts for _, counts in word_frequency]
     plt.barh(words, counts)
@@ -309,7 +420,10 @@ def get_most_similar_documents(sim_dic, n):
 # most important tf-idf content words for each delib map, number of unique content words
 if __name__ == '__main__':
     kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/kialomaps2maintopics.tsv"
-    replacements = create_domains(kialo2topics, "data/plots/top50mergeFreq15.png")
-    print(replacements)
+    main_topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
+
+    # replacements = create_domains(kialo2topics, "data/plots/top50mergeFreq15.png")
+    #main_domains(kialo2topics, main_topics)
+    kialo_maps2topic(kialo2topics, main_topics)
     # tag_headmap_kialo(kialo2topics, 50, "data/plots/heatmapTop40.png")
     # topic_analysis()
