@@ -138,12 +138,17 @@ def main():
                   use_amp=False  # Set to True, if your GPU supports FP16 operations
                   )
     # eval
+    all_results = []
     if args['do_eval']:
-        eval(model_save_path, args, argument_maps_test,
-             domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all')
+        all_results.extend(
+            eval(model_save_path, args, argument_maps_test,
+                 domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all'))
         if args['training_domain_index'] >= 0:
             for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
-                eval(model_save_path, args, argument_maps_test, domain=domain)
+                all_results.extend(eval(model_save_path, args, argument_maps_test, domain=domain))
+        avg_results = get_avg(all_results)
+        (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
+        wandb.log({'test': {'avg': avg_results}})
 
 
 def eval(output_dir, args, argument_maps, domain):
@@ -172,11 +177,17 @@ def eval(output_dir, args, argument_maps, domain):
             table, "map id", "score", title="Detailed results per map id")}})
         raise e
 
+    avg_results = get_avg(all_results)
+    (results_path / f'-avg.json').write_text(json.dumps(avg_results))
+    wandb.log({'test': {domain: {'avg': avg_results}}})
+    return all_results
+
+
+def get_avg(all_results):
     avg_results = {
         key: {inner_key: sum(entry[key][inner_key] for entry in all_results) / len(all_results) for inner_key in value}
         for key, value in all_results[0].items()}
-    (results_path / f'-avg.json').write_text(json.dumps(avg_results))
-    wandb.log({'test': {domain: {'avg': avg_results}}})
+    return avg_results
 
 
 if __name__ == '__main__':

@@ -76,7 +76,9 @@ def parse_args(add_more_args=None):
 
 def get_model_save_path(model_name, args, map_label=None):
     model_save_path_prefix = 'results/' + (f'{args["output_dir_prefix"]}/' if args['output_dir_prefix'] else '')\
-                             + model_name.replace("/", "-")
+        + (f"domain{args['training_domain_index']}"
+           if 'training_domain_index' in args and args['training_domain_index'] >= 0 else '')
+                             # + model_name.replace("/", "-")
     if not map_label:
         return model_save_path_prefix
     return model_save_path_prefix + \
