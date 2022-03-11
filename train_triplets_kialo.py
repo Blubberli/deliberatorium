@@ -145,7 +145,7 @@ def main():
                  domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all'))
         if args['training_domain_index'] >= 0:
             for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
-                all_results.extend(eval(model_save_path, args, argument_maps_test, domain=domain))
+                all_results.extend(eval(model_save_path, args, domain_argument_maps[domain], domain=domain))
         avg_results = get_avg(all_results)
         (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
         wandb.log({'test': {'avg': avg_results}})
