@@ -4,7 +4,7 @@ import numpy as np
 class Evaluation:
 
     def __init__(self, argument_map, only_parents=False, only_leafs=False, child_node_type=None,
-                 candidate_node_types=None, no_ranks=False):
+                 candidate_node_types=None, no_ranks=False, close_relatives=False):
         """
         Computes the number of times a rank is equal or lower to a given rank.
         :param argument_map [ArgumentMap]: an ArgumentMap object with initialized embedding nodes (embeddings have to normalized!)
@@ -18,18 +18,19 @@ class Evaluation:
         self.argument_map = argument_map
         # gather all nodes in the map and construct a node2index and an embedding matrix
         self.all_nodes = self.argument_map.all_children
-        self.node2id, self.embedding_matrix = self.get_embedding_matrix()
+        self.node2id, self.id2node, self.embedding_matrix = self.get_embedding_matrix()
         # extract the nodes to be tested
         self.child_nodes = self.get_child_nodes(only_leafs, child_node_type, candidate_node_types)
         # extract their corresponding parents
         self.parent_nodes = [child.parent for child in self.child_nodes]
         # extract possible candidate (all parents must be within the candidates)
         self.candidate_nodes = self.get_candidate_nodes(only_parents, candidate_node_types)
-
+        # consider close relatives when computing the metrics
+        self.close_relatives = close_relatives
         assert len(self.child_nodes) == len(
             self.parent_nodes), "the number of children and their parents is not the same"
         if not no_ranks:
-            self.ranks = self.compute_ranks()
+            self.ranks, self.predictions = self.compute_ranks()
 
     def compute_ranks(self):
         """
@@ -42,11 +43,18 @@ class Evaluation:
         :return:
         """
         ranks = []
+        predictions = []
         # compute all possible pairwise similarities
         self.node2node_similarity = np.dot(self.embedding_matrix, np.transpose(self.embedding_matrix))
         # extract child IDs
         self.child_idxs = [self.node2id[node] for node in self.child_nodes]
         self.parent_idx = [self.node2id[node] for node in self.parent_nodes]
+        # extract grandparent and sibling indices
+        if self.close_relatives:
+            # extract grandparent nodes and sibling nodes
+            grandparent_nodes = [child.parent for child in self.parent_nodes]
+            sibling_nodes = [child.siblings for child in self.child_nodes]
+
         # extract candidate IDs
         self.candidate_idxs = [self.node2id[node] for node in self.candidate_nodes]
         # gather similarities for each child to each of the possible candidate nodes and store them in a new matrix
@@ -63,20 +71,43 @@ class Evaluation:
         for i in range(len(self.child_nodes)):
             # compute the similarity between child and correct parent
             child2parent_similarity = np.dot(self.child_nodes[i].embedding, self.parent_nodes[i].embedding)
+            # if close relatives are considered, compute the similarity between child an grand parent and child and siblings
+            if self.close_relatives:
+                all_similarities = [child2parent_similarity]
+                if grandparent_nodes[i]:
+                    child2grandparent_similarity = np.dot(self.child_nodes[i].embedding, grandparent_nodes[i].embedding)
+                    all_similarities.append(child2grandparent_similarity)
+                if len(sibling_nodes[i]) >= 1:
+                    for sibling in sibling_nodes[i]:
+                        all_similarities.append(np.dot(self.child_nodes[i].embedding, sibling.embedding))
+                # set similarity of comparison to the highest similarity of the list of similarities between target node and
+                # close relatives (parent, grandparent and sibling)
+                child2parent_similarity = max(all_similarities)
+
             # similarities between child and all candidates
             target_sims = self.target_similarity_matrix[:, i]
-            # print(np.round(target_sims, decimals=2))
+
             # remove similaritiy between child and itself (if child was within the candidates)
             if to_delete[i]:
                 target_sims = np.delete(target_sims, to_delete[i])
+            # get index of predicted parent
+            max_index = np.where(target_sims == np.amax(target_sims))[0][0]
+            if max_index > self.child_idxs[i]:
+                predicted_parent_index = max_index + 1
+            else:
+                predicted_parent_index = max_index
+            predictions.append(self.id2node[predicted_parent_index])
             # remove similarity between child and parent:
             target_sims = np.delete(target_sims, self.parent_idx[i])
+            # predicted_parents = np.argwhere(target_sims == np.amax(target_sims, 1, keepdims=True))
+            # print(predicted_parents)
             # the rank is the number of embeddings with greater similarity than the one between
             # the child representation and the parent; no sorting is required, just
             # the number of elements that are more similar
             rank = np.count_nonzero(target_sims > child2parent_similarity) + 1
             ranks.append(rank)
-        return ranks
+
+        return ranks, predictions
 
     def get_child_nodes(self, only_leafs, child_node_type, candidate_node_types):
         """Extract the child nodes to be used for evaluation. Apply filtering rules if specified."""
@@ -112,8 +143,9 @@ class Evaluation:
         :return: the embeeding matrix [number_of_nodes, embedding_dim], and the node2index as [dict]
         """
         target2id = dict(zip(self.all_nodes, range(len(self.all_nodes))))
+        id2target = dict(zip(range(len(self.all_nodes)), self.all_nodes))
         matrix = [self.all_nodes[i].embedding for i in range(len(self.all_nodes))]
-        return target2id, np.array(matrix)
+        return target2id, id2target, np.array(matrix)
 
     @staticmethod
     def precision_at_rank(ranks, k):
@@ -135,3 +167,18 @@ class Evaluation:
         """
         precision_scores = sum([1 / r for r in ranks])
         return precision_scores / len(ranks)
+
+    def average_taxonomic_distance(self, quartile):
+        """
+        Computes the average taxonomic distance of the predicted parent nodes for a given quartiles
+        :param predictions: a list of predicted parent nodes
+        :return: the quartiles
+        """
+        taxonomic_distances = []
+        for i in range(len(self.child_nodes)):
+            taxonomic_distances.append(self.child_nodes[i].shortest_path(self.predictions[i]))
+            print(self.child_nodes[i])
+            print(self.predictions[i])
+            print(self.child_nodes[i].shortest_path(self.predictions[i]))
+        print(taxonomic_distances)
+        return np.quantile(taxonomic_distances, quartile, interpolation='midpoint')

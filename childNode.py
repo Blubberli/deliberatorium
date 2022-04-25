@@ -18,6 +18,7 @@ class ChildNode(ABC):
         is_leaf: boolean stores whether the node is a leaf
         direct_children: if the node has children; a list of ChildNode objects that are directly attached to this node.
         parent: exactly one node that is the parent of this node (or None if it is the root node)
+        siblings: a list that contains the sibling nodes; can be empty of no siblings are available
         embedding: either None if it has not been encoded yet, or an embedding representation of this node
         """
         self.id = node_dict["id"]
@@ -28,13 +29,75 @@ class ChildNode(ABC):
         self.is_leaf = True if len(self.direct_children) == 0 else False
         self.parent = None
         self.embedding = None
+        self.siblings = []
         # set this node as parent for each of its' children
         for child in self.direct_children:
             child.parent = self
+            # add all other children on the next level to each others sibling list
+            for child2 in self.direct_children:
+                if child.id != child2.id:
+                    child.siblings.append(child2)
 
     def add_embedding(self, embedding):
         """adds an embedding representation for this node, sets flag to true"""
         self.embedding = embedding
+
+    def lowest_common_subsumer(self, other):
+        """
+        Extract the lowes common subsumer(s) / lowest common ancestor(s) of the current node and a given one.
+        :type other: ChildNode
+        :param other: Another ChildNode object the LCS should be computed to.
+        :return: the ChildNode that represents the lowes common subsumer or None if it is root
+        """
+        if other == self or other.parent == self:
+            return self
+        # self is a direct child of other; so other is the lcs
+        elif other == self.parent:
+            return other
+        hypernyms_node1 = self.get_all_hypernyms(self.parent, [])
+        hypernyms_node2 = self.get_all_hypernyms(other.parent, [])
+        common_hypernyms = list(set(hypernyms_node1).intersection(set(hypernyms_node2)))
+        print(common_hypernyms)
+        if len(common_hypernyms) <= 1:
+            return None
+        levels_hypernyms = [len(node.get_all_hypernyms(node, [])) for node in common_hypernyms if node]
+        return common_hypernyms[levels_hypernyms.index(max(levels_hypernyms))]
+
+    def get_all_hypernyms(self, node, hypernyms):
+        """recursively iterate trough all nodes of a map and append the parent until root..."""
+        hypernyms.append(node)
+        if not node:
+            return hypernyms
+        else:
+            parent = node.parent
+            self.get_all_hypernyms(parent, hypernyms)
+        return hypernyms
+
+    def shortest_path(self, other):
+        """
+        Returns the distance of the shortest path linking the two nodes (if
+        one exists). If a node is compared with itself 0 is returned. The distance is denoted by the number of edges
+        that exist in the shortest path.
+        :param other: a ChildNode to compute the shortest path distance to
+        :return: The number of edges in the shortest path connecting the two nodes
+        """
+        lcs = self.lowest_common_subsumer(other)
+        print("lcs is %s" % lcs)
+        depth_self = len(self.get_all_hypernyms(self.parent, []))
+        depth_other = len(other.get_all_hypernyms(other.parent, []))
+        print("depth self : %d" % depth_self)
+        print("depth other : %d" % depth_other)
+
+        # lcs is node itself
+        if lcs == self:
+            return 0
+        # lcs is root
+        if lcs == None:
+            return depth_self + depth_other
+        depth_lcs = len(lcs.get_all_hypernyms(lcs.parent, []))
+        print("depth lcs : %d" % depth_other)
+
+        return (depth_self - depth_lcs) + (depth_other - depth_lcs)
 
     def __str__(self):
         return str(self.name)
