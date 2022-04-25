@@ -194,7 +194,7 @@ def main_domains(path_kialo2topics, maintopics):
     plt.tight_layout()
     plt.savefig("data/plots/distribution_domains2.png", dpi=1500)
 
-    #heat_map(vocab=list(set(sub2maintopic.values())), map2topics=maps2maintopic,
+    # heat_map(vocab=list(set(sub2maintopic.values())), map2topics=maps2maintopic,
     #         out_path="data/plots/main_topics_heatmap.png")
 
 
@@ -212,7 +212,7 @@ def kialo_maps2topic(path_kialo2topics, maintopics):
             if map.number_of_children() < smallest:
                 smallest = map.number_of_children()
                 smalles_map = mapname
-            topic2numberofnodes[topic]+=nodes
+            topic2numberofnodes[topic] += nodes
     print(smalles_map)
     print(smallest)
     print(topic2numberofnodes)
@@ -344,15 +344,110 @@ def get_most_similar_documents(sim_dic, n):
     return sorted(sim_dic.items(), key=operator.itemgetter(1), reverse=True)[:n]
 
 
+def get_topic_similarity_heatmapTFIDF_top50():
+    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialomaps2maintopics.tsv"
+    topics = pd.read_csv(kialo2topics, sep="\t")
+    topics.dropna(inplace=True)
+    topics["topic_tags"] = [[w.strip().lower() for w in el.split(",")] for el in topics.topics.values]
+    top50 = dict(Counter(itertools.chain(*topics.topic_tags.values)).most_common(50))
+    vocab = list(set(list(top50.keys())))
+    map2topic = get_map2topics(kialo2topics)
+    domain2similarities = get_cosine_similarity_matrix(map2topic, top50=vocab)
+    plot_heatmap_tfidf_similarity(domain2similarities, vocab,
+                                  "/Users/falkne/PycharmProjects/deliberatorium/data/plots/tfIDF_similarity_top50outdomain.png")
+
+
+def get_cosine_similarity_matrix(map2topics, top50=None):
+    tfidf_vectors = np.load("/Users/falkne/PycharmProjects/deliberatorium/kialo_tfidf_vectorsminfreq3.npy")
+    tfidf_vectors = np.squeeze(tfidf_vectors, axis=1)
+    # create the vocab matrix based on all maps
+    maps = open("data/map_names.txt", "r").readlines()
+    maps = [el.strip() for el in maps]
+    map2id = dict(zip(maps, range(0, len(maps))))
+    # get a full matrix of pair-wise cosine similarities between all maps (based on their tf-idf vectors)
+    map2map_similarity_matrix = cosine_similarity(tfidf_vectors, tfidf_vectors, dense_output=True)
+    # create a dic that will keep track of each topic and all similarities of that topic to other topics
+    domain2similarities = defaultdict(dict)
+
+    # iterate through all topics and append the similarity between each map and each other map, keeping track of the topic
+    for m, topic1 in map2topics.items():
+        if m in map2id:
+            id1 = map2id[m]
+            for m2, topic2 in map2topics.items():
+                if m2 in map2id and m2 != m:
+                    id2 = map2id[m2]
+                    cosine_sim = map2map_similarity_matrix[id1][id2]
+                    if top50:
+                        for single_topic1 in topic1:
+                            for single_topic2 in topic2:
+                                if single_topic1 in set(top50) and single_topic2 in set(top50):
+                                    if topic2 not in domain2similarities[topic1]:
+                                        domain2similarities[topic1][topic2] = []
+                                    domain2similarities[topic1][topic2].append(cosine_sim)
+                    else:
+                        if topic2 not in domain2similarities[topic1]:
+                            domain2similarities[topic1][topic2] = []
+                        domain2similarities[topic1][topic2].append(cosine_sim)
+    return domain2similarities
+
+
+def plot_heatmap_tfidf_similarity(topics2similarities, vocab, save_path):
+    """
+    Creates a Triangle Heat Map for a list if topics (dictionary of pair-wise domain similarities has to be provided)
+    :param topics2similarities: a nested dictionary, each key is a topic (topic1) and each value is a dictionary with each domain as a key again (topic2)
+    and a list of cosine similarities that have been computed based on pair-wise similarities between all maps of topic1 and all maps of topic2
+    :param vocab: a unique list of "domains" to create the heatmap for
+    :param save_path: a path to store the plot to
+    """
+    vocab2index = dict(zip(vocab, range(len(vocab))))
+    vocab_matrix = np.zeros(shape=[len(vocab), len(vocab)])
+
+    for tag, index in vocab2index.items():
+        for tag2, index2 in vocab2index.items():
+            sims = topics2similarities[tag][tag2]
+            average = np.average(sims)
+            vocab_matrix[index][index2] = average
+
+    matrix = np.triu(vocab_matrix)
+    sns.set(font_scale=0.3)
+    sns.heatmap(vocab_matrix, xticklabels=vocab, yticklabels=vocab, center=0,
+                square=False, linewidths=.5, cbar_kws={"shrink": .8}, annot=False, mask=matrix)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=1500)
+
+
+def createTextBasedDocumentsFromMaps():
+    """create txt files that contain the text from every argument map from kialo"""
+    data_path = Path.home() / "data/e-delib/deliberatorium/maps/kialo_maps"
+    maps = os.listdir(data_path)
+    dir = "/Users/falkne/PycharmProjects/deliberatorium/kialo_docs/"
+    for map in maps:
+        path = "%s/%s" % (data_path, map)
+        outpath = open("%s/%s" % (dir, map), "w")
+        argument_map = KialoMap(path)
+        thread = argument_map.name
+        outpath.write(thread)
+        for node in argument_map.all_children:
+            text = node.name
+            if not "-> " in text:
+                outpath.write(text + "\n")
+        outpath.close()
+
+
+def create_heatmap_tfIDFsimilarity_mainDomains():
+    # create a mapping from Argument map to main topic
+    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialomaps2maintopics.tsv"
+    main_topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
+    map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
+    # a list of unique main topics
+    main_tops = list(set(list(map2unique.values())))
+    # load the TF-IDF vectors for all Kialo maps
+
+    # iterate through all topics and append the similarity between each map and each other map, keeping track of the topic
+    domain2similarities = get_cosine_similarity_matrix(map2unique)
+    plot_heatmap_tfidf_similarity(domain2similarities, main_tops,
+                                  "/Users/falkne/PycharmProjects/deliberatorium/data/plots/tfIDF_similarity_maintopic.png")
+
 # vocab overlap between each map within deliberatorium
 # vocab overlap for each map in delib to the kialo maps
 # most important tf-idf content words for each delib map, number of unique content words
-if __name__ == '__main__':
-    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/kialomaps2maintopics.tsv"
-    main_topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
-
-    # replacements = create_domains(kialo2topics, "data/plots/top50mergeFreq15.png")
-    #main_domains(kialo2topics, main_topics)
-    kialo_maps2topic(kialo2topics, main_topics)
-    # tag_headmap_kialo(kialo2topics, 50, "data/plots/heatmapTop40.png")
-    # topic_analysis()
