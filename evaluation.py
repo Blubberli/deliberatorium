@@ -70,7 +70,7 @@ class Evaluation:
             if to_delete[i]:
                 target_sims = np.delete(target_sims, to_delete[i])
             # remove similarity between child and parent:
-            target_sims = np.delete(target_sims, self.parent_idx[i])
+            # target_sims = np.delete(target_sims, self.parent_idx[i])
             # the rank is the number of embeddings with greater similarity than the one between
             # the child representation and the parent; no sorting is required, just
             # the number of elements that are more similar
