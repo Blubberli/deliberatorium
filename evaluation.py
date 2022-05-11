@@ -4,7 +4,7 @@ import numpy as np
 class Evaluation:
 
     def __init__(self, argument_map, only_parents=False, only_leafs=False, child_node_type=None,
-                 candidate_node_types=None, no_ranks=False, close_relatives=False):
+                 candidate_node_types=None, no_ranks=False, close_relatives=False, max_candidates=0):
         """
         Computes the number of times a rank is equal or lower to a given rank.
         :param argument_map [ArgumentMap]: an ArgumentMap object with initialized embedding nodes (embeddings have to normalized!)
@@ -27,6 +27,7 @@ class Evaluation:
         self.candidate_nodes = self.get_candidate_nodes(only_parents, candidate_node_types)
         # consider close relatives when computing the metrics
         self.close_relatives = close_relatives
+        self.max_candidates = max_candidates
         assert len(self.child_nodes) == len(
             self.parent_nodes), "the number of children and their parents is not the same"
         if not no_ranks:
@@ -102,7 +103,9 @@ class Evaluation:
             # the rank is the number of embeddings with greater similarity than the one between
             # the child representation and the parent; no sorting is required, just
             # the number of elements that are more similar
-            rank = np.count_nonzero(target_sims > child2parent_similarity) + 1
+            rank = np.count_nonzero((np.random.choice(target_sims, self.max_candidates)
+                                     if self.max_candidates and len(target_sims) > self.max_candidates else
+                                     target_sims) > child2parent_similarity) + 1
             ranks.append(rank)
 
         return ranks, predictions

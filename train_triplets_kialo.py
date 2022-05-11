@@ -31,6 +31,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 
 def add_more_args(parser):
     parser.add_argument('--training_domain_index', type=int, default=-1)
+    parser.add_argument('--max_candidates', type=int, default=0)
 
 
 def main():
@@ -98,7 +99,7 @@ def main():
         maps_samples = {x.label: [] for x in argument_maps_train}
         # maps_samples_dev = {x.label: [] for x in argument_maps}
         for i, argument_map in enumerate(argument_maps_train):
-            argument_map_util = Evaluation(argument_map, no_ranks=True)
+            argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
             for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
                 if args['hard_negatives']:
                     non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
