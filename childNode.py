@@ -54,24 +54,33 @@ class ChildNode(ABC):
         # self is a direct child of other; so other is the lcs
         elif other == self.parent:
             return other
-        hypernyms_node1 = self.get_all_hypernyms(self.parent, [])
-        hypernyms_node2 = self.get_all_hypernyms(other.parent, [])
+        hypernyms_node1 = self.get_all_hypernyms(self, [])
+        hypernyms_node2 = self.get_all_hypernyms(other, [])
         common_hypernyms = list(set(hypernyms_node1).intersection(set(hypernyms_node2)))
-        print(common_hypernyms)
+        # the nodes do not share any common hypernyms, so the lowest subsumer is the root node
         if len(common_hypernyms) <= 1:
             return None
-        levels_hypernyms = [len(node.get_all_hypernyms(node, [])) for node in common_hypernyms if node]
+        # the node at the lowest level / the deepest is the *lowest* common subsumer
+        levels_hypernyms = [node.get_level() if node else 0 for node in common_hypernyms]
         return common_hypernyms[levels_hypernyms.index(max(levels_hypernyms))]
 
     def get_all_hypernyms(self, node, hypernyms):
         """recursively iterate trough all nodes of a map and append the parent until root..."""
-        hypernyms.append(node)
         if not node:
             return hypernyms
         else:
             parent = node.parent
+            hypernyms.append(parent)
             self.get_all_hypernyms(parent, hypernyms)
         return hypernyms
+
+    def get_level(self):
+        """Return the level in the tree of the node (the level equals to the number of hypernyms in the graph)"""
+        hypernyms = self.get_all_hypernyms(self, [])
+        if hypernyms:
+            return len(hypernyms)
+        else:
+            return 0
 
     def shortest_path(self, other):
         """
@@ -82,20 +91,15 @@ class ChildNode(ABC):
         :return: The number of edges in the shortest path connecting the two nodes
         """
         lcs = self.lowest_common_subsumer(other)
-        print("lcs is %s" % lcs)
-        depth_self = len(self.get_all_hypernyms(self.parent, []))
-        depth_other = len(other.get_all_hypernyms(other.parent, []))
-        print("depth self : %d" % depth_self)
-        print("depth other : %d" % depth_other)
-
+        depth_self = self.get_level()
+        depth_other = other.get_level()
         # lcs is node itself
         if lcs == self:
             return 0
         # lcs is root
         if lcs == None:
             return depth_self + depth_other
-        depth_lcs = len(lcs.get_all_hypernyms(lcs.parent, []))
-        print("depth lcs : %d" % depth_other)
+        depth_lcs = lcs.get_level()
 
         return (depth_self - depth_lcs) + (depth_other - depth_lcs)
 

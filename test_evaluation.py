@@ -102,9 +102,10 @@ class TestEvaluation(unittest.TestCase):
         np.testing.assert_equal(node1.shortest_path(node2), 5)
 
     def test_average_distance(self):
-        # q1 = 1; q2 = 1; q3 =
+        # q1 = 2; q2 = 2; q3 = 3;
         q1 = self.evaluation_all_types.average_taxonomic_distance(0.25)
         q2 = self.evaluation_all_types.average_taxonomic_distance(0.50)
         q3 = self.evaluation_all_types.average_taxonomic_distance(0.75)
-
-        print(q1)
+        np.testing.assert_equal(q1, 2)
+        np.testing.assert_equal(q2, 2)
+        np.testing.assert_equal(q3, 3)

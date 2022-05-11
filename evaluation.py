@@ -40,7 +40,7 @@ class Evaluation:
         the candidate than the parent=correct node). The rank is the position at which the parent is ranked within the list
         of similar nodes (i.e. if rank=1 then the parent node is the most similar node, if rank=3 then there are 2 nodes
         in the list that are more similar to the candidate than the parent)
-        :return:
+        :return: two lists: one contains the ranks of the predicted parents, one the predicted parent nodes
         """
         ranks = []
         predictions = []
@@ -99,8 +99,6 @@ class Evaluation:
             predictions.append(self.id2node[predicted_parent_index])
             # remove similarity between child and parent:
             target_sims = np.delete(target_sims, self.parent_idx[i])
-            # predicted_parents = np.argwhere(target_sims == np.amax(target_sims, 1, keepdims=True))
-            # print(predicted_parents)
             # the rank is the number of embeddings with greater similarity than the one between
             # the child representation and the parent; no sorting is required, just
             # the number of elements that are more similar
@@ -171,14 +169,11 @@ class Evaluation:
     def average_taxonomic_distance(self, quartile):
         """
         Computes the average taxonomic distance of the predicted parent nodes for a given quartiles
-        :param predictions: a list of predicted parent nodes
+        :param predictions: a list of predicted parent nodes. the average taxonomic distance to the predicted "parents"
+        corresponds to the second quartile
         :return: the quartiles
         """
         taxonomic_distances = []
         for i in range(len(self.child_nodes)):
             taxonomic_distances.append(self.child_nodes[i].shortest_path(self.predictions[i]))
-            print(self.child_nodes[i])
-            print(self.predictions[i])
-            print(self.child_nodes[i].shortest_path(self.predictions[i]))
-        print(taxonomic_distances)
         return np.quantile(taxonomic_distances, quartile, interpolation='midpoint')
