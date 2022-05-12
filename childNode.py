@@ -49,13 +49,18 @@ class ChildNode(ABC):
         :param other: Another ChildNode object the LCS should be computed to.
         :return: the ChildNode that represents the lowes common subsumer or None if it is root
         """
-        if other == self or other.parent == self:
+        # self and other are the same? lcs is self
+        if self == other:
             return self
-        # self is a direct child of other; so other is the lcs
-        elif other == self.parent:
-            return other
         hypernyms_node1 = self.get_all_hypernyms(self, [])
         hypernyms_node2 = self.get_all_hypernyms(other, [])
+        # other is a hypernym of self? then other is the lcs
+        if other in set(hypernyms_node1):
+            return other
+        # self is in hypernyms of other? then self is the lcs
+        elif self in set(hypernyms_node2):
+            return self
+        # find the set of common hypernyms and the one with the lowest level is the lowes common subsumer
         common_hypernyms = list(set(hypernyms_node1).intersection(set(hypernyms_node2)))
         # the nodes do not share any common hypernyms, so the lowest subsumer is the root node
         if len(common_hypernyms) <= 1:
@@ -93,14 +98,10 @@ class ChildNode(ABC):
         lcs = self.lowest_common_subsumer(other)
         depth_self = self.get_level()
         depth_other = other.get_level()
-        # lcs is node itself
-        if lcs == self:
-            return 0
         # lcs is root
         if lcs == None:
             return depth_self + depth_other
         depth_lcs = lcs.get_level()
-
         return (depth_self - depth_lcs) + (depth_other - depth_lcs)
 
     def __str__(self):

@@ -100,6 +100,9 @@ class TestEvaluation(unittest.TestCase):
         np.testing.assert_equal(node1.shortest_path(node2), 3)
         node1 = nodes[3]
         np.testing.assert_equal(node1.shortest_path(node2), 5)
+        node2 = nodes[1]
+        np.testing.assert_equal(node1.shortest_path(node2), 2)
+
 
     def test_average_distance(self):
         # q1 = 2; q2 = 2; q3 = 3;
