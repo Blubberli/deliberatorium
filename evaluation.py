@@ -59,7 +59,7 @@ class Evaluation:
                     to_delete[j] = i
                 self.target_similarity_matrix[i, j] = self.node2node_similarity[
                     self.candidate_idxs[i], self.child_idxs[j]]
-
+        print('candidates', self.max_candidates)
         for i in range(len(self.child_nodes)):
             # compute the similarity between child and correct parent
             child2parent_similarity = np.dot(self.child_nodes[i].embedding, self.parent_nodes[i].embedding)
@@ -74,8 +74,11 @@ class Evaluation:
             # the rank is the number of embeddings with greater similarity than the one between
             # the child representation and the parent; no sorting is required, just
             # the number of elements that are more similar
+            print('debug ', len(np.random.choice(target_sims, self.max_candidates)
+                                if 0 < self.max_candidates < len(target_sims) else
+                                target_sims))
             rank = np.count_nonzero((np.random.choice(target_sims, self.max_candidates)
-                                     if self.max_candidates and len(target_sims) > self.max_candidates else
+                                     if 0 < self.max_candidates < len(target_sims) else
                                      target_sims) > child2parent_similarity) + 1
             ranks.append(rank)
         return ranks
