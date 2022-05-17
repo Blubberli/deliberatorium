@@ -54,18 +54,24 @@ def extract_random_map_from_filtering(maps, min_size, max_size, min_depth, max_d
     return random.choice(filtered_maps)
 
 
-def extract_node_samples_from_depth_bins(argument_map, n):
+def extract_node_samples_from_depth_bins(argument_map, n, node_type=None):
     # get all leaf nodes
     leaf_nodes = [node for node in argument_map.all_children if node.is_leaf]
     # remove nodes that are too short
     leaf_nodes = [node for node in leaf_nodes if len(node.name.split(" ")) > 5]
+
     # get all levels
     levels = [node.get_level() for node in leaf_nodes]
+    # get all node types
+    types = [node.type for node in leaf_nodes]
     # create a data frame with three bins according to level
     df = pd.DataFrame()
     df["nodes"] = leaf_nodes
     df["levels"] = levels
     df["coarse_level"] = pd.cut(df["levels"], 3, precision=0, labels=["general", "middle", "specific"])
+    df["type"] = types
+    if node_type:
+        df = df[df.type == node_type]
     return df.groupby("coarse_level").sample(n=n)
 
 
@@ -133,9 +139,9 @@ def write_annotation_data(output_dir, annotation_data, map):
         candidates = [str(el) for el in candidates]
         annotation_frame["candidates"] = candidates
 
-        annotation_frame["PARENT"] = [""] * len(annotation_frame)
-        annotation_frame["RELATED"] = [""] * len(annotation_frame)
-        annotation_frame["UNRELATED"] = [""] * len(annotation_frame)
+        annotation_frame["BEST PARENT"] = [""] * len(annotation_frame)
+        annotation_frame["OTHER SUITABLE PARENTS"] = [""] * len(annotation_frame)
+        annotation_frame["LESS SUITABLE PARENTS"] = [""] * len(annotation_frame)
         annotation_frame.to_csv(annotation_path, sep="\t", index=False)
 
         annotation["candidates"].to_csv(candidate_path, sep="\t", index=False)
@@ -150,18 +156,33 @@ def write_annotation_data(output_dir, annotation_data, map):
 if __name__ == '__main__':
     kialo2topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialomaps2maintopics.tsv"
     main_topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
+
     map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
 
-    annotation_dir = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/pilot_annotation"
-    p = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps/should-the-death-penalty-be-abolished-28302.txt"
+    annotation_dir = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/second_pilot/large_map"
+    #p = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps/should-the-death-penalty-be-abolished-28302.txt"
 
     data_path = Path("/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps")
     maps = list(data_path.glob(f"*.txt"))
     argument_maps = read_all_maps(data_path)
-    map = extract_random_map_from_filtering(maps=argument_maps, topic='enviroment', min_depth=10, max_depth=28,
+    map = extract_random_map_from_filtering(maps=argument_maps, topic='democracy', min_depth=5, max_depth=25,
                                             min_size=500,
-                                            max_size=1500, map2topic=map2unique)
+                                            max_size=1000, map2topic=map2unique)
 
-    target_node_df = extract_node_samples_from_depth_bins(map, 1)
+    df_pro = extract_node_samples_from_depth_bins(map, 1, node_type="Pro")
+    df_pro = df_pro[(df_pro['coarse_level'] == 'middle') | (df_pro['coarse_level'] == 'specific')]
+
+    df_con = extract_node_samples_from_depth_bins(map, 1, node_type="Con")
+    df_con = df_con[(df_con['coarse_level'] == 'middle') | (df_con['coarse_level']=='specific')]
+
+    df_pro = df_pro.sample(n=1)
+    df_con = df_con.sample(n=1)
+
+    target_node_df = pd.concat([df_con, df_pro])
+
     annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
     write_annotation_data(annotation_dir, annotation_data, map)
+
+
+
+
