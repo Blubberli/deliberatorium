@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import pandas as pd
+
 from encode_nodes import MapEncoder
 from argumentMap import KialoMap, DeliberatoriumMap
 from evaluation import Evaluation
@@ -16,15 +18,23 @@ def evaluate_map(encoder_mulitlingual, argument_map, node_types):
     results['only_leafs'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True))
     print("only leaf nodes and only issues and ideas as parents")
     results['only_leafs_limited_types'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
-                                                              candidate_node_types=node_types))
+                                                              candidate_node_types=node_types), argument_map)
     return results
 
 
-def eval_one(evaluation: Evaluation):
+def eval_one(evaluation: Evaluation, name=None):
     mrr = evaluation.mean_reciprocal_rank(evaluation.ranks)
     p5 = evaluation.precision_at_rank(evaluation.ranks, 5)
     p1 = evaluation.precision_at_rank(evaluation.ranks, 1)
     # print(eval.ranks)
+    if name:
+        pd.DataFrame({'children': evaluation.child_nodes, 'parents': evaluation.parent_nodes, 'predictions': evaluation.predictions, 'ranks': evaluation.ranks}).to_csv(f'pred/{name}-nodes{len(evaluation.child_nodes)}.csv')
+    # for child, parent, prediction, rank in \
+    #         zip(evaluation.child_nodes, evaluation.parent_nodes, evaluation.predictions, evaluation.ranks):
+    #     print(f'child: {child}')
+    #     print(f'parent: {parent}')
+    #     print(f'prediction: {prediction}')
+    #     print(f'rank: {rank}\n')
     print("child nodes: %d candidates :%d MRR: %.2f p@5: %.2f p@1: %.2f" % (
         len(evaluation.child_nodes), len(evaluation.candidate_nodes), mrr, p5, p1))
     return {'mrr': mrr, 'p5': p5, 'p1': p1}
