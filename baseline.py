@@ -6,17 +6,19 @@ from argumentMap import KialoMap, DeliberatoriumMap
 from evaluation import Evaluation
 
 
-def evaluate_map(encoder_mulitlingual, argument_map, node_types):
+def evaluate_map(encoder_mulitlingual, argument_map, node_types, max_candidates=0):
     results = {}
     print('eval', argument_map.name)
     encoder_mulitlingual.encode_argument_map(argument_map)
     print("default setting: all nodes are evaluated, all nodes are considered as candidates")
-    results['all'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True))
+    results['all'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True, max_candidates=max_candidates))
     print("only check for leaf nodes")
-    results['only_leafs'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True))
+    results['only_leafs'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
+                                                max_candidates=max_candidates))
     print("only leaf nodes and only issues and ideas as parents")
     results['only_leafs_limited_types'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
-                                                              candidate_node_types=node_types))
+                                                              candidate_node_types=node_types,
+                                                              max_candidates=max_candidates))
     return results
 
 

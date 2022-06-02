@@ -143,16 +143,18 @@ def main():
     if args['do_eval']:
         all_results.extend(
             eval(model_save_path, args, argument_maps_test,
-                 domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all'))
+                 domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all',
+                 max_candidates=args['max_candidates']))
         if args['training_domain_index'] >= 0:
             for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
-                all_results.extend(eval(model_save_path, args, domain_argument_maps[domain], domain=domain))
+                all_results.extend(eval(model_save_path, args, domain_argument_maps[domain], domain=domain,
+                                        max_candidates=args['max_candidates']))
         avg_results = get_avg(all_results)
         (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
         wandb.log({'test': {'avg': avg_results}})
 
 
-def eval(output_dir, args, argument_maps, domain):
+def eval(output_dir, args, argument_maps, domain, max_candidates):
     model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
                                 output_dir)
     results_path = Path(output_dir + '-results') / domain
@@ -165,7 +167,8 @@ def eval(output_dir, args, argument_maps, domain):
     maps_all_results = {}
     try:
         for j, eval_argument_map in enumerate(tqdm(argument_maps, f'eval maps in domain {domain}')):
-            results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"Pro", "Con"})
+            results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"Pro", "Con"},
+                                   max_candidates=max_candidates)
             maps_all_results[eval_argument_map.label] = results
             all_results.append(results)
     except Exception as e:
