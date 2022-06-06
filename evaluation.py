@@ -93,7 +93,7 @@ class Evaluation:
                 target_sims = np.delete(target_sims, to_delete[i])
             # get index of predicted parent
             max_index = np.where(target_sims == np.amax(target_sims))[0][0]
-            if max_index > self.child_idxs[i]:
+            if max_index >= self.child_idxs[i]:
                 predicted_parent_index = max_index + 1
             else:
                 predicted_parent_index = max_index

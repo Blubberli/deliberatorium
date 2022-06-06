@@ -161,6 +161,9 @@ class KialoChildNode(ChildNode):
         :param node_dict: the dictionary representation of the node
         """
         super(KialoChildNode, self).__init__(node_dict)
+        self.created = node_dict["created"]
+        self.impact = node_dict["impact"]
+        self.edited = node_dict["edited"]
         self.depth = self.get_depth()
 
     def init_direct_children(self, node_dict):

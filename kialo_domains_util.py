@@ -1,6 +1,5 @@
 import itertools
 from collections import defaultdict, Counter
-
 import pandas as pd
 
 
@@ -9,7 +8,7 @@ def get_map2topics(path_kialo2topics):
     topics = pd.read_csv(path_kialo2topics, sep="\t")
     topics.dropna(inplace=True)
     topics["topic_tags"] = [[w.strip().lower() for w in el.split(",")] for el in topics.topics.values]
-    return dict(zip(topics.name, topics.topic_tags))
+    return dict(zip(topics.MapID, topics.topic_tags))
 
 
 def get_subtopic_to_parent(maintopics):
