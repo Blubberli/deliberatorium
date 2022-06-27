@@ -44,9 +44,9 @@ def main():
     max_seq_length = 75
     num_epochs = args['num_train_epochs']
 
-    data_path = (Path.home() / "data/e-delib/kialo/kialo_maps" if args['local'] else
-                 Path("/mount/projekte/e-delib/data/kialo/kialo_maps"))
-    maps = list(data_path.glob(f"*.txt"))
+    data_path = (Path.home() / "data/e-delib/kialo/kialoV2" if args['local'] else
+                 Path("/mount/projekte/e-delib/data/kialo/kialoV2"))
+    maps = list(data_path.glob(f"**/*.pkl"))
 
     if args['debug_maps_size']:
         maps = sorted(maps, key=os.path.getsize)
@@ -60,7 +60,7 @@ def main():
     # kialo domains
     main_domains = []
     if args['training_domain_index'] >= 0:
-        maps2uniquetopic, (_, _, main2subtopic) = get_maps2uniquetopic('data/kialomaps2maintopics.tsv',
+        maps2uniquetopic, (_, _, main2subtopic) = get_maps2uniquetopic('data/kialoID2MainTopic.csv',
                                                                        'data/kialo_domains.tsv')
         main_domains = list(main2subtopic.keys())
 
@@ -167,7 +167,7 @@ def eval(output_dir, args, argument_maps, domain, max_candidates):
     maps_all_results = {}
     try:
         for j, eval_argument_map in enumerate(tqdm(argument_maps, f'eval maps in domain {domain}')):
-            results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"Pro", "Con"},
+            results = evaluate_map(encoder_mulitlingual, eval_argument_map, {1, -1},
                                    max_candidates=max_candidates)
             maps_all_results[eval_argument_map.label] = results
             all_results.append(results)
