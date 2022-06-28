@@ -3,7 +3,8 @@ import train_triplets_kialo
 
 
 def baseline():
-    sys.argv += '--eval_model_name_or_path all-mpnet-base-v2 --eval_not_trained True --do_train False'.split(' ')
+    # sys.argv += '--eval_model_name_or_path sentence-transformers/all-mpnet-base-v2 --eval_not_trained True --do_train False'.split(' ')
+    sys.argv += '--eval_model_name_or_path sentence-transformers/paraphrase-albert-small-v2 --eval_not_trained True --do_train False'.split(' ')
 
 
 sys.argv += ['--local', 'True']
