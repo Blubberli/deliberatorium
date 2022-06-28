@@ -97,7 +97,7 @@ def main():
                # to fix "Error communicating with wandb process"
                # see https://docs.wandb.ai/guides/track/launch#init-start-error
                settings=wandb.Settings(start_method="fork"))
-    wandb.config.update(args)
+    wandb.config.update(args | {'data': 'kialoV2'})
 
     if args['do_train']:
 
