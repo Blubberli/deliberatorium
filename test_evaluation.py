@@ -8,8 +8,9 @@ import unittest
 class TestEvaluation(unittest.TestCase):
 
     def setUp(self):
+        from pathlib import Path
         self.small_map = KialoMap(
-            data_path="kialoV2/unittest_data/10133.pkl")
+            data_path=(str(Path.home() / "data/e-delib/kialo/kialoV2/unittest_data/10133.pkl")))
         self.encoder_mulitlingual = MapEncoder(max_seq_len=128, sbert_model_identifier="all-mpnet-base-v2",
                                                normalize_embeddings=True, use_descriptions=False)
         self.encoder_mulitlingual.encode_argument_map(self.small_map)
