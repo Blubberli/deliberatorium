@@ -24,7 +24,7 @@ from train_triplets_delib import parse_args, get_model_save_path
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
 
-logging.basicConfig(format='%(asctime)s - %(message)s',
+logging.basicConfig(format='%(asctime)s,%(msecs)d p%(process)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
                     level=logging.INFO,
                     handlers=[LoggingHandler()])
@@ -81,10 +81,10 @@ def main():
                 domain_argument_maps[maps2uniquetopic[argument_map.id]].append(argument_map)
             else:
                 logging.warning(f'{argument_map.label} {argument_map.name} skipped!')
-        print(f'{len(domain_argument_maps)=}')
         argument_maps = domain_argument_maps[main_domains[args['training_domain_index']]]
         args['training_domain'] = main_domains[args['training_domain_index']]
-        print(f"{args['training_domain']=}")
+        logging.info(f"{args['training_domain']=}")
+        logging.info(f"{len(argument_maps)=} maps in domain args['training_domain_index']={args['training_domain']}")
 
     # split data
     argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=42) \
@@ -108,7 +108,7 @@ def main():
         # prepare samples
         maps_samples = {x.label: [] for x in argument_maps_train}
         # maps_samples_dev = {x.label: [] for x in argument_maps}
-        for i, argument_map in enumerate(argument_maps_train):
+        for i, argument_map in enumerate(tqdm(argument_maps_train, f'preparing samples for training')):
             argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
             for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
                 if args['hard_negatives']:

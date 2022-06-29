@@ -70,10 +70,10 @@ def get_unique_label(maps2maintopics):
 
 def get_maps2uniquetopic(path_kialo2topics, maintopics):
     maps2topics = get_map2topics(path_kialo2topics)
-    print(len(maps2topics))
+    print(f'{len(maps2topics)} maps have tags')
     sub2maintopic, main2subtopic = get_subtopic_to_parent(maintopics)
     maps2maintopic, left_maps = get_map2main_topic(maps2topics, sub2maintopic)
-    print("%d of the maps  have topic tag(s)" % len(maps2maintopic))
-    print(maps2maintopic)
+    print("%d maps have topic tag(s)" % len(maps2maintopic))
+    # print(maps2maintopic)
     map2unique = get_unique_label(maps2maintopic)
     return map2unique, (maps2topics, sub2maintopic, main2subtopic)
