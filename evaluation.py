@@ -61,11 +61,14 @@ class Evaluation:
         # gather similarities for each child to each of the possible candidate nodes and store them in a new matrix
         self.target_similarity_matrix = np.zeros(shape=[len(self.candidate_idxs), len(self.child_idxs)])
         # a list to store the index of the child in the candidate list
-        to_delete = [None] * len(self.child_idxs)
+        target_similarity_matrix_child_idx = [None] * len(self.child_idxs)
+        target_similarity_matrix_parent_idx = [None] * len(self.child_idxs)
         for i in range(len(self.candidate_idxs)):
             for j in range(len(self.child_idxs)):
                 if self.candidate_idxs[i] == self.child_idxs[j]:
-                    to_delete[j] = i
+                    target_similarity_matrix_child_idx[j] = i
+                if self.candidate_idxs[i] == self.parent_idx[j]:
+                    target_similarity_matrix_parent_idx[j] = i
                 self.target_similarity_matrix[i, j] = self.node2node_similarity[
                     self.candidate_idxs[i], self.child_idxs[j]]
 
@@ -85,21 +88,18 @@ class Evaluation:
                 # close relatives (parent, grandparent and sibling)
                 child2parent_similarity = max(all_similarities)
 
-            # similarities between child and all candidates
-            target_sims = self.target_similarity_matrix[:, i]
+            # similarities between child and all candidates. make a copy to not change original values in matrix
+            target_sims = np.copy(self.target_similarity_matrix[:, i])
 
-            # remove similaritiy between child and itself (if child was within the candidates)
-            if to_delete[i]:
-                target_sims = np.delete(target_sims, to_delete[i])
+            # set similarity between child and itself to zero (if child was within the candidates)
+            # deleting the item leads to wrong indexing of parent to delete later
+            if target_similarity_matrix_child_idx[i]:
+                target_sims[target_similarity_matrix_child_idx[i]] = 0
             # get index of predicted parent
             max_index = np.where(target_sims == np.amax(target_sims))[0][0]
-            if max_index > self.child_idxs[i]:
-                predicted_parent_index = max_index + 1
-            else:
-                predicted_parent_index = max_index
-            predictions.append(self.id2node[predicted_parent_index])
-            # remove similarity between child and parent:
-            target_sims = np.delete(target_sims, self.parent_idx[i])
+            predictions.append(self.id2node[max_index])
+            # set similarity between child and parent to zero
+            target_sims[target_similarity_matrix_parent_idx[i]] = 0
             # the rank is the number of embeddings with greater similarity than the one between
             # the child representation and the parent; no sorting is required, just
             # the number of elements that are more similar

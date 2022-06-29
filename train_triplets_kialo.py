@@ -6,6 +6,7 @@ import math
 import os
 import random
 import signal
+import statistics
 from pathlib import Path
 
 import wandb
@@ -15,7 +16,7 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 from argumentMap import KialoMap
-from baseline import evaluate_map
+from baseline import evaluate_map, METRICS
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
@@ -30,6 +31,8 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 
 
 def add_more_args(parser):
+    parser.add_argument('--debug_map_index', type=str, default=None)
+    parser.add_argument('--no_data_split', type=str, default=None)
     parser.add_argument('--training_domain_index', type=int, default=-1)
     parser.add_argument('--max_candidates', type=int, default=0)
 
@@ -44,12 +47,14 @@ def main():
     max_seq_length = 75
     num_epochs = args['num_train_epochs']
 
-    data_path = (Path.home() / "data/e-delib/kialo/kialo_maps" if args['local'] else
-                 Path("/mount/projekte/e-delib/data/kialo/kialo_maps"))
-    maps = list(data_path.glob(f"*.txt"))
+    data_path = (Path.home() / "data/e-delib/kialo/kialoV2" if args['local'] else
+                 Path("/mount/projekte/e-delib/data/kialo/kialoV2"))
+    maps = list(data_path.glob(f"**/*.pkl"))
 
     if args['debug_maps_size']:
         maps = sorted(maps, key=os.path.getsize)
+        if args['debug_map_index']:
+            maps = list(data_path.glob(f"**/{args['debug_map_index']}.pkl")) + maps
         maps = maps[:args['debug_maps_size']]
 
     argument_maps = [KialoMap(str(_map), _map.stem) for _map in tqdm(maps, f'processing maps')
@@ -60,7 +65,7 @@ def main():
     # kialo domains
     main_domains = []
     if args['training_domain_index'] >= 0:
-        maps2uniquetopic, (_, _, main2subtopic) = get_maps2uniquetopic('data/kialomaps2maintopics.tsv',
+        maps2uniquetopic, (_, _, main2subtopic) = get_maps2uniquetopic('data/kialoID2MainTopic.csv',
                                                                        'data/kialo_domains.tsv')
         main_domains = list(main2subtopic.keys())
 
@@ -78,7 +83,8 @@ def main():
         args['training_domain'] = main_domains[args['training_domain_index']]
 
     # split data
-    argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=42)
+    argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=42) \
+        if not args['no_data_split'] else (argument_maps, argument_maps)
     logging.info(f'train/eval using {len(argument_maps_train)=} {len(argument_maps_test)=}')
 
     model_save_path = get_model_save_path(model_name, args)
@@ -91,7 +97,7 @@ def main():
                # to fix "Error communicating with wandb process"
                # see https://docs.wandb.ai/guides/track/launch#init-start-error
                settings=wandb.Settings(start_method="fork"))
-    wandb.config.update(args)
+    wandb.config.update(args | {'data': 'kialoV2'})
 
     if args['do_train']:
 
@@ -167,8 +173,12 @@ def eval(output_dir, args, argument_maps, domain, max_candidates):
     maps_all_results = {}
     try:
         for j, eval_argument_map in enumerate(tqdm(argument_maps, f'eval maps in domain {domain}')):
-            results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"Pro", "Con"},
-                                   max_candidates=max_candidates)
+            try:
+                results = evaluate_map(encoder_mulitlingual, eval_argument_map, {1, -1},
+                                       max_candidates=max_candidates)
+            except Exception as e:
+                logging.error('cannot evaluate map ' + eval_argument_map.label)
+                raise e
             maps_all_results[eval_argument_map.label] = results
             all_results.append(results)
     except Exception as e:
@@ -189,7 +199,8 @@ def eval(output_dir, args, argument_maps, domain, max_candidates):
 
 def get_avg(all_results):
     avg_results = {
-        key: {inner_key: sum(entry[key][inner_key] for entry in all_results) / len(all_results) for inner_key in value}
+        key: {inner_key: statistics.fmean(entry[key][inner_key] for entry in all_results if entry[key])
+              for inner_key in METRICS}
         for key, value in all_results[0].items()}
     return avg_results
 

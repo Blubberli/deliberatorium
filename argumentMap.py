@@ -1,6 +1,8 @@
 import json
 import re
 from abc import ABC, abstractmethod
+import pickle as pkl
+import networkx as nx
 from childNode import DelibChildNode, KialoChildNode
 
 
@@ -101,31 +103,35 @@ class KialoMap(ArgumentMap):
     def load_data(self, data_path):
         """Loads the data from the .txt files"""
         data_dict = {}
-        with open(data_path, 'r') as f:
-            content = f.readlines()
+        with open(data_path, 'rb') as f:
+            data = pkl.load(f)
+        id = data_path.split("/")[-1].replace(".pkl", "")
+        claim = data.node["%s.0" % id]["text"].strip()
+        self.root_id = "%s.0" % id
+        edges = data.edge
+        if claim == "":
+            if "%s.1" % id not in data.node:
+                for k, v in data.node.items():
+                    if v["relation"] == 0 and k != "%s.0" % id:
+                        claim = v["text"].strip()
+                        self.root_id = k
+            else:
+                claim = data.node["%s.1" % id]["text"].strip()
+                self.root_id = "%s.1" % id
+
         # the name is the topic of the map
-        data_dict["name"] = content[2].replace("1. ", "")
-        try:
-            # the id can be taken from the file name
-            map_id = re.search("\d+", data_path).group(0)
-        except AttributeError:
-            map_id = 0  # default id if no id found
-        data_dict["id"] = map_id
+        data_dict["name"] = claim
+        data_dict["id"] = id
         data_dict["children"] = []
-        # skip first two lines (line 1 contains the discussion topic and line 2 is empty)
-        for line in content[3:]:
-            # each line contains the content of one child node.
-            parts = line.split(" ")
-            if len(parts) > 1:
-                id = line.split(" ")[0]
-                type = line.split(" ")[1].replace(":", "").strip()
-                text = " ".join(line.split(" ")[2:]).strip()
-                text = self.remove_links(text)
-                data_dict["children"].append({"id": id, "type": type, "name": text})
+        for nodeid, nodecontent in data.node.items():
+            data_dict["children"].append({"id": nodeid, "type": nodecontent["relation"], "name": nodecontent["text"],
+                                          "edited": nodecontent["edited"], "impact": nodecontent["votes"],
+                                          "created": nodecontent["created"]})
+
         # for each child the list of direct children has to be added to the node dictionary (which can only
         # be retrieved after having read the file completely.
         for child in data_dict["children"]:
-            child["children"] = self.get_direct_children(child["id"], data_dict["children"])
+            child["children"] = self.get_direct_children(child["id"], data_dict["children"], edges)
         return data_dict
 
     def init_children(self):
@@ -133,24 +139,22 @@ class KialoMap(ArgumentMap):
         children_list = []
         if self.data["children"]:
             for child in self.data["children"]:
-                if child["id"].count(".") == 2:
-                    children_list.append(KialoChildNode(child))
+                if child["id"] == self.root_id:
+                    self.root = KialoChildNode(child)
+                    for rootchild in child["children"]:
+                        children_list.append(KialoChildNode(rootchild))
         return children_list
 
-    def get_direct_children(self, id, all_nodes):
-        """Given an id, extract all child nodes that correspond to direct children of a node
-        (e.g. if my id is '1' then give me any two digits with 1 as a first """
-        # each dot represents a node level, so the direct children are one level above the current node (node level +1)
-        child_len = id.count(".") + 1
-        # get all nodes that are at exactly one level above and that are children of the node
-        # (the id starts with the parents node id)
+    def get_direct_children(self, id, all_nodes, edges):
+        """Given an id, extract all child nodes that correspond to direct children of a node"""
+        child_ids = [k for k, v in edges.items() if id in v]
         direct_children = [node for node in all_nodes if
-                           node["id"].count(".") == child_len and node["id"].startswith(id)]
+                           node["id"] in child_ids]
         return direct_children
 
     def get_max_depth(self):
         """Return the maximal tree depth of this map"""
-        return max([node.depth for node in self.all_children])
+        return max([node.get_level() for node in self.all_children])
 
     @staticmethod
     def remove_links(sentence):

@@ -1,9 +1,19 @@
+import logging
+
 import os
 from pathlib import Path
 
 from encode_nodes import MapEncoder
 from argumentMap import KialoMap, DeliberatoriumMap
 from evaluation import Evaluation
+from sentence_transformers import LoggingHandler
+
+logging.basicConfig(format='%(asctime)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    level=logging.INFO,
+                    handlers=[LoggingHandler()])
+
+METRICS = ['mrr', 'p5', 'p1']
 
 
 def evaluate_map(encoder_mulitlingual, argument_map, node_types, max_candidates=0):
@@ -23,13 +33,16 @@ def evaluate_map(encoder_mulitlingual, argument_map, node_types, max_candidates=
 
 
 def eval_one(evaluation: Evaluation):
+    if len(evaluation.child_nodes) == 0:
+        logging.warning('no child nodes found')
+        return None
     mrr = evaluation.mean_reciprocal_rank(evaluation.ranks)
     p5 = evaluation.precision_at_rank(evaluation.ranks, 5)
     p1 = evaluation.precision_at_rank(evaluation.ranks, 1)
     # print(eval.ranks)
     print("child nodes: %d candidates :%d MRR: %.2f p@5: %.2f p@1: %.2f" % (
         len(evaluation.child_nodes), len(evaluation.candidate_nodes), mrr, p5, p1))
-    return {'mrr': mrr, 'p5': p5, 'p1': p1}
+    return dict(zip(METRICS, [mrr, p5, p1]))
 
 
 

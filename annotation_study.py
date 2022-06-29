@@ -10,7 +10,7 @@
 #   - extract a random sample of 2 with a distance >2
 from tqdm import tqdm
 from argumentMap import KialoMap
-from domain_similarity import get_maps2uniquetopic
+from kialo_domains_util import get_maps2uniquetopic
 from pathlib import Path
 import pandas as pd
 from numpy import random
@@ -19,9 +19,12 @@ import os
 
 # create a mapping from Argument map to main topic
 
-def read_all_maps(data_path):
+def read_all_maps(data_path, debug_maps_size=None):
     """read all maps from source directory and return a list of ArgMap objects"""
-    maps = list(Path(data_path).glob(f"*.txt"))
+    maps = list(Path(data_path).glob(f"*.pkl"))
+    if debug_maps_size:
+        maps = sorted(maps, key=os.path.getsize)
+        maps = maps[:debug_maps_size]
     argument_maps = [KialoMap(str(_map), _map.stem) for _map in tqdm(maps, f'processing maps')
                      # some maps seem to be duplicates with (1) in name
                      if '(1)' not in _map.stem]
@@ -30,8 +33,8 @@ def read_all_maps(data_path):
 
 def filter_maps_by_main_topic(main_topic, map2topic, maps):
     """provide a topic and retrieve all corresponding maps"""
-    filtered_maps = [map for map in maps if map.name in map2topic]
-    filtered_maps = [map for map in filtered_maps if map2topic[map.name] == main_topic]
+    filtered_maps = [map for map in maps if int(map.id) in map2topic]
+    filtered_maps = [map for map in filtered_maps if map2topic[int(map.id)] == main_topic]
     return filtered_maps
 
 
@@ -54,7 +57,7 @@ def extract_random_map_from_filtering(maps, min_size, max_size, min_depth, max_d
     return random.choice(filtered_maps)
 
 
-def extract_node_samples_from_depth_bins(argument_map, n, node_type=None):
+def extract_node_samples_from_depth_bins(argument_map, node_type=None):
     # get all leaf nodes
     leaf_nodes = [node for node in argument_map.all_children if node.is_leaf]
     # remove nodes that are too short
@@ -68,11 +71,13 @@ def extract_node_samples_from_depth_bins(argument_map, n, node_type=None):
     df = pd.DataFrame()
     df["nodes"] = leaf_nodes
     df["levels"] = levels
+
     df["coarse_level"] = pd.cut(df["levels"], 3, precision=0, labels=["general", "middle", "specific"])
     df["type"] = types
     if node_type:
         df = df[df.type == node_type]
-    return df.groupby("coarse_level").sample(n=n)
+
+    return df
 
 
 def get_informative_dataframe(nodes_list, target_node):
@@ -83,6 +88,7 @@ def get_informative_dataframe(nodes_list, target_node):
     df["node_type"] = [node.type for node in nodes_list]
     df["id"] = [node.id for node in nodes_list]
     df["distance"] = [target_node.shortest_path(node) for node in nodes_list]
+    df["impact"] = [str(node.impact) for node in nodes_list]
     return df
 
 
@@ -124,11 +130,11 @@ def extract_candidates(argument_map, target_node_df):
 
 
 def write_annotation_data(output_dir, annotation_data, map):
-    with open(os.path.join(output_dir, "map_info.txt"), "w") as f:
-        f.write("claim: %s size: %d depth: %d" % (map.name, map.number_of_children(), map.max_depth))
     for node, annotation in annotation_data.items():
         path = os.path.join(output_dir, (node).replace(".", ""))
         os.mkdir(path)
+        with open(os.path.join(path, "map_info.txt"), "w") as f:
+            f.write("claim: %s size: %d depth: %d" % (map.name, map.number_of_children(), map.max_depth))
         candidate_path = os.path.join(path, "candidates.csv")
         target_node_path = os.path.join(path, "target_node.csv")
         annotation_path = os.path.join(path, "example%s.csv" % (node).replace(".", ""))
@@ -154,35 +160,43 @@ def write_annotation_data(output_dir, annotation_data, map):
 # bins kialo size: (11-1000), (1000-2000), (2000-3000), (3000-4000), >4000
 
 if __name__ == '__main__':
-    kialo2topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialomaps2maintopics.tsv"
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    data_path = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialoV2/english"
+    argument_maps = read_all_maps(data_path)
+    kialo2topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialoID2MainTopic.csv"
     main_topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
 
     map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
 
-    annotation_dir = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/second_pilot/large_map"
-    #p = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps/should-the-death-penalty-be-abolished-28302.txt"
-
-    data_path = Path("/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps")
-    maps = list(data_path.glob(f"*.txt"))
-    argument_maps = read_all_maps(data_path)
-    map = extract_random_map_from_filtering(maps=argument_maps, topic='democracy', min_depth=5, max_depth=25,
-                                            min_size=500,
-                                            max_size=1000, map2topic=map2unique)
-
-    df_pro = extract_node_samples_from_depth_bins(map, 1, node_type="Pro")
-    df_pro = df_pro[(df_pro['coarse_level'] == 'middle') | (df_pro['coarse_level'] == 'specific')]
-
-    df_con = extract_node_samples_from_depth_bins(map, 1, node_type="Con")
-    df_con = df_con[(df_con['coarse_level'] == 'middle') | (df_con['coarse_level']=='specific')]
-
-    df_pro = df_pro.sample(n=1)
-    df_con = df_con.sample(n=1)
-
-    target_node_df = pd.concat([df_con, df_pro])
-
-    annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
-    write_annotation_data(annotation_dir, annotation_data, map)
 
 
+    annotation_dir = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2/enviroment"
+    # p = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps/should-the-death-penalty-be-abolished-28302.txt"
+    used_maps = set()
+    for i in range(0, 2):
+        sucess = False
+        while not sucess:
+            map = extract_random_map_from_filtering(maps=argument_maps, topic='enviroment', min_depth=4, max_depth=50,
+                                                    min_size=200,
+                                                    max_size=3000, map2topic=map2unique)
 
+            df_pro = extract_node_samples_from_depth_bins(map, node_type=1)
+            df_pro = df_pro[(df_pro['coarse_level'] == 'middle') | (df_pro['coarse_level'] == 'specific')]
 
+            df_con = extract_node_samples_from_depth_bins(map, node_type=-1)
+            df_con = df_con[(df_con['coarse_level'] == 'middle') | (df_con['coarse_level'] == 'specific')]
+            if len(df_pro) >= 1 and len(df_con) >= 1 and map.id not in used_maps:
+                df_pro = df_pro.sample(n=1)
+                df_con = df_con.sample(n=1)
+                sucess = True
+                used_maps.add(map.id)
+        print(map.name)
+
+        target_node_df = pd.concat([df_con, df_pro])
+
+        annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
+        write_annotation_data(annotation_dir, annotation_data, map)
+
+# human rights, enviroment, democracy, finance
