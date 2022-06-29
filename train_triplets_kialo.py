@@ -49,7 +49,10 @@ def main():
 
     data_path = (Path.home() / "data/e-delib/kialo/kialoV2" if args['local'] else
                  Path("/mount/projekte/e-delib/data/kialo/kialoV2"))
-    maps = list(data_path.glob(f"**/*.pkl"))
+    # list of maps with no duplicates
+    maps = []
+    for lang in ['english', 'french', 'german', 'italian', 'other']:
+        maps += [x for x in data_path.glob(f'{lang}/*.pkl') if x.stem not in [y.stem for y in maps]]
 
     if args['debug_maps_size']:
         maps = sorted(maps, key=os.path.getsize)
