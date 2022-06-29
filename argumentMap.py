@@ -24,7 +24,7 @@ class ArgumentMap(ABC):
         """
         self.label = label
         self.data = self.load_data(data_path)
-        self.id = self.data["id"]
+        self.id = int(self.data["id"])
         self.name = self.data["name"].strip()
         self.direct_children = self.init_children()
         all_children = []

@@ -74,13 +74,14 @@ def main():
         #                         for domain in main2subtopic}
         domain_argument_maps = {domain: [] for domain in main2subtopic}
         for argument_map in argument_maps:
-            if argument_map.name in maps2uniquetopic:
-                domain_argument_maps[maps2uniquetopic[argument_map.name]].append(argument_map)
+            if argument_map.id in maps2uniquetopic:
+                domain_argument_maps[maps2uniquetopic[argument_map.id]].append(argument_map)
             else:
-                logging.warning(argument_map.name + ' skipped!')
+                logging.warning(f'{argument_map.label} {argument_map.name} skipped!')
         print(f'{len(domain_argument_maps)=}')
         argument_maps = domain_argument_maps[main_domains[args['training_domain_index']]]
         args['training_domain'] = main_domains[args['training_domain_index']]
+        print(f"{args['training_domain']=}")
 
     # split data
     argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=42) \
