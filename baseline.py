@@ -13,7 +13,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
                     level=logging.INFO,
                     handlers=[LoggingHandler()])
 
-METRICS = ['mrr', 'p5', 'p1']
+METRICS = ['mrr', 'p5', 'p1', 'dist']
 
 
 def evaluate_map(encoder_mulitlingual, argument_map, node_types, max_candidates=0):
@@ -39,10 +39,11 @@ def eval_one(evaluation: Evaluation):
     mrr = evaluation.mean_reciprocal_rank(evaluation.ranks)
     p5 = evaluation.precision_at_rank(evaluation.ranks, 5)
     p1 = evaluation.precision_at_rank(evaluation.ranks, 1)
+    dist = evaluation.average_taxonomic_distance(0.5)
     # print(eval.ranks)
-    print("child nodes: %d candidates :%d MRR: %.2f p@5: %.2f p@1: %.2f" % (
-        len(evaluation.child_nodes), len(evaluation.candidate_nodes), mrr, p5, p1))
-    return dict(zip(METRICS, [mrr, p5, p1]))
+    print("child nodes: %d candidates :%d MRR: %.2f p@5: %.2f p@1: %.2f dist: %.2f" % (
+        len(evaluation.child_nodes), len(evaluation.candidate_nodes), mrr, p5, p1, dist))
+    return dict(zip(METRICS, [mrr, p5, p1, dist]))
 
 
 
