@@ -98,6 +98,7 @@ class KialoMap(ArgumentMap):
 
     def __init__(self, data_path, label=None):
         super(KialoMap, self).__init__(data_path, label)
+        self.id = int(self.id)
         self.max_depth = self.get_max_depth()
 
     def load_data(self, data_path):
