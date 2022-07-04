@@ -12,6 +12,6 @@ sys.argv += '--eval_model_name_or_path sentence-transformers/paraphrase-albert-s
 # sys.argv += '--no_data_split True --debug_map_index 22187'.split(' ')
 
 # philosophy domain
-sys.argv += '--training_domain_index 15 --debug_maps_size 1000'.split(' ')
+sys.argv += '--training_domain_index 16 --debug_maps_size 1000'.split(' ')
 
 train_triplets_kialo.main()

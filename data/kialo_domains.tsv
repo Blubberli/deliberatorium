@@ -1,24 +1,18 @@
 maintopic	subtopics
-religion	"christianity, god, religion"
-gender	"feminism, gender, women, lgbtq"
-enviroment	"climate change, economics, earth, enviroment"
-animals	"animals, animal rights"
-democracy	"democracy, elections"
-europe	"europe, eu, uk"
-technology	"ai, technology, internet, computers, computing, gaming, games, software"
-education	"children, school, education"
-history	history
-violence	violence
-military	"war, military"
-business	business
-human rights	"race, equality, human rights, free speech"
-health	"medicine, health"
-morality	morality
-philosophy	philosophy
-science	science
-culture	"culture, art, artist, movies, film, literature, music"
-law	"justice, law"
-finance	"money, cryptocurrency, crypto, blockchain, taxation, finance"
-usa	"usa, trump, obama"
-immigration	"immigration, border, control"
-sports	sports
+culture	"history, world, culture, languages"
+science	"medicine, science, humans, psychology, health"
+religion	"religion, christianity"
+relationships	"sex, relationships"
+politics	"democracy, elections, eu, uk, trump, government, president"
+law	"law, policy"
+entertainment	"sports, literature, entertainment, games, gaming, movies, music"
+violence	"war, violence, military, nuclearweapons"
+justice	"justice, humanrights, freespeech, freedom"
+education	"children, education, school"
+gender	"equality, feminism, gender, lgbtq, women"
+economics	"business, money, economics, taxation, crypto, blockchain"
+environment	"environment, climatechange"
+animals	"animals, animalrights"
+technology	"technology, software, ai, computers, internet"
+immigration	"immigration, refugees, race"
+ethics	"ethics, morality, philosophy"
