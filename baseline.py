@@ -18,24 +18,27 @@ METRICS = ['mrr', 'p5', 'p1', 'dist']
 
 def evaluate_map(encoder_mulitlingual, argument_map, node_types, max_candidates=0):
     results = {}
+    node_results = {}
     print('eval', argument_map.name)
     encoder_mulitlingual.encode_argument_map(argument_map)
     print("default setting: all nodes are evaluated, all nodes are considered as candidates")
-    results['all'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True, max_candidates=max_candidates))
+    results['all'], node_results['all'] = eval_one(
+        Evaluation(argument_map=argument_map, only_leafs=False, max_candidates=max_candidates))
     print("only check for leaf nodes")
-    results['only_leafs'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
-                                                max_candidates=max_candidates))
+    results['only_leafs'], node_results['only_leafs'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
+                                                                           max_candidates=max_candidates))
     print("only leaf nodes and only issues and ideas as parents")
-    results['only_leafs_limited_types'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
-                                                              candidate_node_types=node_types,
-                                                              max_candidates=max_candidates))
-    return results
+    results['only_leafs_limited_types'], node_results['only_leafs_limited_types'] = eval_one(
+        Evaluation(argument_map=argument_map, only_leafs=True,
+                   candidate_node_types=node_types,
+                   max_candidates=max_candidates))
+    return results, node_results
 
 
 def eval_one(evaluation: Evaluation):
     if len(evaluation.child_nodes) == 0:
         logging.warning('no child nodes found')
-        return None
+        return None, None
     mrr = evaluation.mean_reciprocal_rank(evaluation.ranks)
     p5 = evaluation.precision_at_rank(evaluation.ranks, 5)
     p1 = evaluation.precision_at_rank(evaluation.ranks, 1)
@@ -43,7 +46,9 @@ def eval_one(evaluation: Evaluation):
     # print(eval.ranks)
     print("child nodes: %d candidates :%d MRR: %.2f p@5: %.2f p@1: %.2f dist: %.2f" % (
         len(evaluation.child_nodes), len(evaluation.candidate_nodes), mrr, p5, p1, dist))
-    return dict(zip(METRICS, [mrr, p5, p1, dist]))
+    return dict(zip(METRICS, [mrr, p5, p1, dist])), \
+           [(c.id, r, p.id, t) for c, r, p, t in zip(evaluation.child_nodes, evaluation.ranks, evaluation.predictions,
+                                                     evaluation.taxonomic_distances)]
 
 
 

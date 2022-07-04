@@ -175,25 +175,27 @@ def eval(output_dir, args, argument_maps, domain, max_candidates):
                                       normalize_embeddings=True)
     all_results = []
     maps_all_results = {}
+    nodes_all_results = {}
     try:
         for j, eval_argument_map in enumerate(tqdm(argument_maps, f'eval maps in domain {domain}')):
             try:
-                results = evaluate_map(encoder_mulitlingual, eval_argument_map, {1, -1},
-                                       max_candidates=max_candidates)
+                results, nodes_all_results[eval_argument_map.label] = evaluate_map(encoder_mulitlingual,
+                                                                                   eval_argument_map, {1, -1},
+                                                                                   max_candidates=max_candidates)
             except Exception as e:
                 logging.error('cannot evaluate map ' + eval_argument_map.label)
                 raise e
             maps_all_results[eval_argument_map.label] = results
             all_results.append(results)
-    except Exception as e:
+    finally:
         (results_path / f'all_maps.json').write_text(json.dumps(maps_all_results))
+        (results_path / f'all_nodes.json').write_text(json.dumps(nodes_all_results))
         # wandb.log({'test': maps_all_results})
         # wandb.log({'test': all_results})
         # data = [[map_name.rsplit('-', 1)[-1], v] for map_name, v in maps_all_results.items()]
         # table = wandb.Table(data=data, columns=["map id", "scores"])
         # wandb.log({'test': {'detailed': wandb.plot.line(
         #     table, "map id", "score", title="Detailed results per map id")}})
-        raise e
 
     avg_results = get_avg(all_results)
     (results_path / f'-avg.json').write_text(json.dumps(avg_results))

@@ -209,7 +209,7 @@ def eval(output_dir, args, argument_maps, training_map_index=-1):
         train_eval = ((args['train_on_one_map'] and training_map_index == j) or
                       (not args['train_on_one_map'] and training_map_index != j)
                       and training_map_index >= 0)
-        results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
+        results, _ = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
         (results_path / f'{eval_argument_map.label}{"-train" if train_eval else ""}.json'). \
             write_text(json.dumps(results))
         wandb.log({eval_argument_map.label: results})

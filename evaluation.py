@@ -176,7 +176,7 @@ class Evaluation:
         corresponds to the second quartile
         :return: the quartiles
         """
-        taxonomic_distances = []
+        self.taxonomic_distances = []
         for i in range(len(self.child_nodes)):
-            taxonomic_distances.append(self.child_nodes[i].shortest_path(self.predictions[i]))
-        return np.quantile(taxonomic_distances, quartile, interpolation='midpoint')
+            self.taxonomic_distances.append(self.child_nodes[i].shortest_path(self.predictions[i]))
+        return np.quantile(self.taxonomic_distances, quartile, interpolation='midpoint')
