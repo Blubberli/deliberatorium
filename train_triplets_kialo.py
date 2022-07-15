@@ -15,11 +15,11 @@ from sentence_transformers import models, losses, datasets
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-from argumentMap import KialoMap
 from baseline import evaluate_map, METRICS
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
+from kialo_util import read_data
 from train_triplets_delib import parse_args, get_model_save_path
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
@@ -47,23 +47,7 @@ def main():
     max_seq_length = 75
     num_epochs = args['num_train_epochs']
 
-    data_path = (Path.home() / "data/e-delib/kialo/kialoV2" if args['local'] else
-                 Path("/mount/projekte/e-delib/data/kialo/kialoV2"))
-    # list of maps with no duplicates
-    maps = []
-    for lang in ['english', 'french', 'german', 'italian', 'other']:
-        maps += [x for x in data_path.glob(f'{lang}/*.pkl') if x.stem not in [y.stem for y in maps]]
-
-    if args['debug_maps_size']:
-        maps = sorted(maps, key=os.path.getsize)
-        if args['debug_map_index']:
-            maps = list(data_path.glob(f"**/{args['debug_map_index']}.pkl")) + maps
-        maps = maps[:args['debug_maps_size']]
-
-    argument_maps = [KialoMap(str(_map), _map.stem) for _map in tqdm(maps, f'processing maps')
-                     # some maps seem to be duplicates with (1) in name
-                     if '(1)' not in _map.stem]
-    logging.info(f'remaining {len(maps)} maps after clean up')
+    argument_maps = read_data(args)
 
     # kialo domains
     main_domains = []
