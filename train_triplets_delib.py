@@ -34,7 +34,7 @@ def parse_args(add_more_args=None):
     parser.add_argument('--do_train', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--eval_not_trained', type=lambda x: (str(x).lower() == 'true'), default=False)
-    parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
+    parser.add_argument('--model_name_or_path', help="model", type=str)
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
     parser.add_argument('--output_dir_prefix', type=str, default=None)
     parser.add_argument('--output_dir_label', type=str)

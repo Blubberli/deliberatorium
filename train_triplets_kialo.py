@@ -12,8 +12,10 @@ from pathlib import Path
 import wandb
 from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample
 from sentence_transformers import models, losses, datasets
+from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
+from transformers import set_seed
 
 from baseline import evaluate_map, METRICS
 from encode_nodes import MapEncoder
@@ -34,6 +36,7 @@ def add_more_args(parser):
     parser.add_argument('--debug_map_index', type=str, default=None)
     parser.add_argument('--no_data_split', type=str, default=None)
     parser.add_argument('--training_domain_index', type=int, default=-1)
+    parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
 
 
@@ -41,6 +44,10 @@ def main():
     faulthandler.register(signal.SIGUSR1.value)
 
     args = parse_args(add_more_args)
+
+    seed = 42
+    set_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
     model_name = args['model_name_or_path']
     train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
@@ -71,9 +78,14 @@ def main():
         logging.info(f"{len(argument_maps)=} maps in domain args['training_domain_index']={args['training_domain']}")
 
     # split data
-    argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=42) \
+    argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=seed) \
         if not args['no_data_split'] else (argument_maps, argument_maps)
-    logging.info(f'train/eval using {len(argument_maps_train)=} {len(argument_maps_test)=}')
+    if args['use_dev']:
+        argument_maps_train, argument_maps_dev = train_test_split(argument_maps_train, test_size=0.2, random_state=seed)
+    else:
+        argument_maps_dev = []
+    logging.info(f'train/dev/test using '
+                 f'{len(argument_maps_train)=} {len(argument_maps_dev)=} {len(argument_maps_test)=}')
 
     model_save_path = get_model_save_path(model_name, args)
     logging.info(f'{model_save_path=}')
@@ -89,37 +101,25 @@ def main():
 
     if args['do_train']:
 
-        # prepare samples
-        maps_samples = {x.label: [] for x in argument_maps_train}
-        # maps_samples_dev = {x.label: [] for x in argument_maps}
-        for i, argument_map in enumerate(tqdm(argument_maps_train, f'preparing samples for training')):
-            argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
-            for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-                if args['hard_negatives']:
-                    non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
-                    if len(non_parents) > args['hard_negatives_size'] > 0:
-                        non_parents = random.sample(non_parents, args['hard_negatives_size'])
-                    for non_parent in non_parents:
-                        # NOTE original code also adds opposite
-                        maps_samples[argument_map.label].append(
-                            InputExample(texts=[x.name for x in [child, parent, non_parent]]))
-                else:
-                    maps_samples[argument_map.label].append(
-                        InputExample(texts=[x.name for x in [child, parent]]))
-        if args['debug_size']:
-            maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
+        maps_samples = prepare_samples(argument_maps_train, 'train', args)
+        maps_samples_dev = prepare_samples(argument_maps_dev, 'dev', args)
 
         word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
         pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
         model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
         train_samples = list(itertools.chain(*maps_samples.values()))
+        dev_samples = list(itertools.chain(*maps_samples_dev.values()))
 
         logging.info("Train samples: {}".format(len(train_samples)))
 
         # Special data loader that avoid duplicates within a batch
         train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=train_batch_size)
         train_loss = losses.MultipleNegativesRankingLoss(model)
+
+        dev_evaluator = (EmbeddingSimilarityEvaluator.from_input_examples(
+            dev_samples, batch_size=train_batch_size, name=args['argument_map_dev'])
+                         if args['use_dev'] else None)
 
         print(f'{len(train_dataloader)=}')
         # 10% of train data for warm-up
@@ -146,6 +146,27 @@ def main():
         avg_results = get_avg(all_results)
         (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
         wandb.log({'test': {'avg': avg_results}})
+
+
+def prepare_samples(argument_maps, split, args):
+    maps_samples = {x.label: [] for x in argument_maps}
+    for i, argument_map in enumerate(tqdm(argument_maps, f'preparing samples {split}')):
+        argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
+        for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
+            if args['hard_negatives']:
+                non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
+                if len(non_parents) > args['hard_negatives_size'] > 0:
+                    non_parents = random.sample(non_parents, args['hard_negatives_size'])
+                for non_parent in non_parents:
+                    # NOTE original code also adds opposite
+                    maps_samples[argument_map.label].append(
+                        InputExample(texts=[x.name for x in [child, parent, non_parent]]))
+            else:
+                maps_samples[argument_map.label].append(
+                    InputExample(texts=[x.name for x in [child, parent]]))
+    if args['debug_size']:
+        maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
+    return maps_samples
 
 
 def eval(output_dir, args, argument_maps, domain, max_candidates):
