@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 from numpy import random
 import os
+import glob
 
 
 # create a mapping from Argument map to main topic
@@ -156,31 +157,14 @@ def write_annotation_data(output_dir, annotation_data, map):
             f.write("%s\t%s\t%s\t%s\n" % (annotation["target"], node, annotation["parent"], annotation["parent.ID"]))
 
 
-# bins kialo depth: (2-10), (10-18), (18-26), (26-34), (34-42)
-# bins kialo size: (11-1000), (1000-2000), (2000-3000), (3000-4000), >4000
-
-if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    data_path = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialoV2/english"
-    argument_maps = read_all_maps(data_path)
-    kialo2topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialoID2MainTopic.csv"
-    main_topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
-
-    map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
-
-
-
-    annotation_dir = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2/enviroment"
-    # p = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps/should-the-death-penalty-be-abolished-28302.txt"
+def sample_annotation_batch(topic, min_size, max_size, number_of_pairs, output_dir, argument_maps, map2unique):
     used_maps = set()
-    for i in range(0, 2):
+    for i in range(0, number_of_pairs):
         sucess = False
         while not sucess:
-            map = extract_random_map_from_filtering(maps=argument_maps, topic='enviroment', min_depth=4, max_depth=50,
-                                                    min_size=200,
-                                                    max_size=3000, map2topic=map2unique)
+            map = extract_random_map_from_filtering(maps=argument_maps, topic=topic, min_depth=4, max_depth=50,
+                                                    min_size=min_size,
+                                                    max_size=max_size, map2topic=map2unique)
 
             df_pro = extract_node_samples_from_depth_bins(map, node_type=1)
             df_pro = df_pro[(df_pro['coarse_level'] == 'middle') | (df_pro['coarse_level'] == 'specific')]
@@ -197,6 +181,77 @@ if __name__ == '__main__':
         target_node_df = pd.concat([df_con, df_pro])
 
         annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
-        write_annotation_data(annotation_dir, annotation_data, map)
+        write_annotation_data(output_dir, annotation_data, map)
 
+
+def convert_annotationdata_to_googleforms(annot_dir):
+    # form questions	question type	answer start	answer end	Description
+    print(annot_dir)
+    output_file = open(annot_dir + "/googleformssheet.csv", "w")
+    output_file.write("form questions\tquestion type\tanswer start\tanswer end\tDescription\n")
+    for root, dirs, files in os.walk(annot_dir):
+        for file in files:
+            if "example" in file:
+                example_file = os.path.join(root, file)
+                map_info = example_file.replace(file, "map_info.txt")
+                claim = open(map_info).readlines()[0].split("size")[0].strip()
+                df = pd.read_csv(example_file, sep="\t")
+                target = df["target"].values[0]
+                candidates = df["candidates"].values
+                canidate_string = "#".join(candidates)
+                selectstring = "BEST PARENT#SUITABLE PARENT#LESS SUITABLE PARENT"
+                output_file.write("%s\t%s\t%s\t%s\t%s\n" % (
+                    target, "checkbox grid", canidate_string, selectstring, claim))
+
+    output_file.close()
+
+
+# bins kialo depth: (2-10), (10-18), (18-26), (26-34), (34-42)
+# bins kialo size: (11-1000), (1000-2000), (2000-3000), (3000-4000), >4000
+
+def get_topic2claims(annotdir):
+    topic2cclaims = {}
+    for root, dirs, files in os.walk(annotdir):
+        for file in files:
+            if "example" in file:
+                example_file = os.path.join(root, file)
+                map_info = example_file.replace(file, "map_info.txt")
+                claim = open(map_info).readlines()[0].split("size")[0].strip()
+                topic = map_info.split("/")[-3]
+                if topic not in topic2cclaims:
+                    topic2cclaims[topic] = set()
+                topic2cclaims[topic].add(claim)
+    for topic, claims in topic2cclaims.items():
+        print(topic, claims)
+
+def convert_googleform_answers(input_form, answer_dir, max_documents):
+    answers = []
+    for i in range(1, max_documents):
+        answersheet = pd.read_csv("%s/KialoAnnotations%d.csv" % (answer_dir, i))
+        answers.append(answersheet)
+    df = pd.concat(answers)
+    df.to_csv("/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2/answers/round1/merged_answers.csv", index=False, sep="\t")
+
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    """
+    data_path = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialoV2/english"
+    #argument_maps = read_all_maps(data_path, debug_maps_size=900)
+    get_topic2claims("/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2")
+    kialo2topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialoID2MainTopic.csv"
+    main_topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
+
+    map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
+
+    annotation_dir = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2"
+    #sample_annotation_batch(topic="immigration", argument_maps=argument_maps, output_dir=annotation_dir, max_size=200,
+    #                        min_size=70, number_of_pairs=1, map2unique=map2unique)
+
+    #convert_annotationdata_to_googleforms(annotation_dir)
+
+    # p = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps/should-the-death-penalty-be-abolished-28302.txt"
+    """
+    convert_googleform_answers("", "/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2/answers/round1", 10)
 # human rights, enviroment, democracy, finance
