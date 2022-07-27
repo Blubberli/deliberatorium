@@ -42,6 +42,7 @@ def parse_args(add_more_args=None):
     parser.add_argument('--train_batch_size', type=int, default=64)
     parser.add_argument('--eval_steps', type=int, default=1000)
     parser.add_argument('--lang', help="english, italian,..", type=str, default=None)
+    parser.add_argument('--max_seq_length', type=int, default=256)
     parser.add_argument('--use_descriptions', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
@@ -96,7 +97,7 @@ def main():
     
     model_name = args['model_name_or_path']
     train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
-    max_seq_length = 75
+    max_seq_length = args['max_seq_length']
     num_epochs = args['num_train_epochs']
 
     data_path = (Path.home() / "data/e-delib/deliberatorium/maps" if args['local'] else
@@ -203,7 +204,7 @@ def eval(output_dir, args, argument_maps, training_map_index=-1):
                                 output_dir)
     results_path = Path(output_dir + '-results')
     results_path.mkdir(exist_ok=True, parents=True)
-    encoder_mulitlingual = MapEncoder(max_seq_len=128,
+    encoder_mulitlingual = MapEncoder(max_seq_len=args['max_seq_length'],
                                       sbert_model_identifier=None,
                                       model=model,
                                       normalize_embeddings=True, use_descriptions=args['use_descriptions'])

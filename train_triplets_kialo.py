@@ -51,7 +51,7 @@ def main():
 
     model_name = args['model_name_or_path']
     train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
-    max_seq_length = 75
+    max_seq_length = args['max_seq_length']
     num_epochs = args['num_train_epochs']
 
     argument_maps = read_data(args)
@@ -181,7 +181,7 @@ def eval(output_dir, args, argument_maps, domain, max_candidates):
                                 output_dir)
     results_path = Path(output_dir + '-results') / domain
     results_path.mkdir(exist_ok=True, parents=True)
-    encoder_mulitlingual = MapEncoder(max_seq_len=128,
+    encoder_mulitlingual = MapEncoder(max_seq_len=args['max_seq_length'],
                                       sbert_model_identifier=None,
                                       model=model,
                                       normalize_embeddings=True)
