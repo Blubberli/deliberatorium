@@ -5,6 +5,7 @@ import train_triplets_kialo
 sys.argv += ['--local', 'True']
 sys.argv += ['--debug_maps_size', '10']
 sys.argv += '--model_name_or_path sentence-transformers/paraphrase-albert-small-v2'.split(' ')
+sys.argv += '--lang english'.split(' ')
 
 # sys.argv += '--eval_model_name_or_path sentence-transformers/paraphrase-multilingual-mpnet-base-v2'.split(' ')
 # sys.argv += '--eval_model_name_or_path sentence-transformers/paraphrase-albert-small-v2'.split(' ')

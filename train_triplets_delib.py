@@ -41,7 +41,7 @@ def parse_args(add_more_args=None):
     parser.add_argument('--num_train_epochs', type=int, default=1)
     parser.add_argument('--train_batch_size', type=int, default=64)
     parser.add_argument('--eval_steps', type=int, default=1000)
-    parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
+    parser.add_argument('--lang', help="english, italian,..", type=str, default=None)
     parser.add_argument('--use_descriptions', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
@@ -91,6 +91,8 @@ def main():
     faulthandler.register(signal.SIGUSR1.value)
 
     args = parse_args()
+
+    assert args['lang'] in ['english', 'italian', None]
     
     model_name = args['model_name_or_path']
     train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
