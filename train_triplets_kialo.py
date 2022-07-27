@@ -118,7 +118,7 @@ def main():
         train_loss = losses.MultipleNegativesRankingLoss(model)
 
         dev_evaluator = (EmbeddingSimilarityEvaluator.from_input_examples(
-            dev_samples, batch_size=train_batch_size, name=args['argument_map_dev'])
+            dev_samples, batch_size=train_batch_size, name='dev')
                          if args['use_dev'] else None)
 
         print(f'{len(train_dataloader)=}')
@@ -128,6 +128,9 @@ def main():
 
         model.fit(train_objectives=[(train_dataloader, train_loss)],
                   epochs=num_epochs,
+                  evaluator=dev_evaluator,
+                  evaluation_steps=args['eval_steps'] if args['eval_steps'] else
+                  (int(len(train_dataloader) * 0.1) if dev_evaluator else 0),
                   warmup_steps=warmup_steps,
                   output_path=model_save_path,
                   use_amp=False  # Set to True, if your GPU supports FP16 operations
@@ -153,17 +156,21 @@ def prepare_samples(argument_maps, split, args):
     for i, argument_map in enumerate(tqdm(argument_maps, f'preparing samples {split}')):
         argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
         for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-            if args['hard_negatives']:
+            if split == 'dev' or args['hard_negatives']:
                 non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
                 if len(non_parents) > args['hard_negatives_size'] > 0:
                     non_parents = random.sample(non_parents, args['hard_negatives_size'])
-                for non_parent in non_parents:
+                if split == 'dev':
+                    maps_samples[argument_map.label].extend([InputExample(
+                        texts=[x.name for x in [child, non_parent]], label=0) for non_parent in non_parents])
+                    maps_samples[argument_map.label].append(InputExample(
+                        texts=[x.name for x in [child, parent]], label=1))
+                else:
                     # NOTE original code also adds opposite
-                    maps_samples[argument_map.label].append(
-                        InputExample(texts=[x.name for x in [child, parent, non_parent]]))
+                    maps_samples[argument_map.label].extend([InputExample(
+                        texts=[x.name for x in [child, parent, non_parent]]) for non_parent in non_parents])
             else:
-                maps_samples[argument_map.label].append(
-                    InputExample(texts=[x.name for x in [child, parent]]))
+                maps_samples[argument_map.label].append(InputExample(texts=[x.name for x in [child, parent]]))
     if args['debug_size']:
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
     return maps_samples
