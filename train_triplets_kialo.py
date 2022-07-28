@@ -10,7 +10,7 @@ import statistics
 from pathlib import Path
 
 import wandb
-from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample
+from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample, CrossEncoder
 from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 from sklearn.model_selection import train_test_split
@@ -137,14 +137,15 @@ def main():
                   )
     # eval
     all_results = []
+    cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
     if args['do_eval']:
         all_results.extend(
-            eval(model_save_path, args, argument_maps_test,
+            eval(model_save_path, cross_encoder, args, argument_maps_test,
                  domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all',
                  max_candidates=args['max_candidates']))
         if args['training_domain_index'] >= 0:
             for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
-                all_results.extend(eval(model_save_path, args, domain_argument_maps[domain], domain=domain,
+                all_results.extend(eval(model_save_path, cross_encoder, args, domain_argument_maps[domain], domain=domain,
                                         max_candidates=args['max_candidates']))
         avg_results = get_avg(all_results)
         (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
@@ -176,7 +177,7 @@ def prepare_samples(argument_maps, split, args):
     return maps_samples
 
 
-def eval(output_dir, args, argument_maps, domain, max_candidates):
+def eval(output_dir, cross_encoder, args, argument_maps, domain, max_candidates):
     model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
                                 output_dir)
     results_path = Path(output_dir + '-results') / domain
@@ -192,6 +193,7 @@ def eval(output_dir, args, argument_maps, domain, max_candidates):
         for j, eval_argument_map in enumerate(tqdm(argument_maps, f'eval maps in domain {domain}')):
             try:
                 results, nodes_all_results[eval_argument_map.label] = evaluate_map(encoder_mulitlingual,
+                                                                                   cross_encoder,
                                                                                    eval_argument_map, {1, -1},
                                                                                    max_candidates=max_candidates)
             except Exception as e:

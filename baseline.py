@@ -8,6 +8,8 @@ from argumentMap import KialoMap, DeliberatoriumMap
 from evaluation import Evaluation
 from sentence_transformers import LoggingHandler
 
+from rerank_evaluation import RerankEvaluation
+
 logging.basicConfig(format='%(asctime)s - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
                     level=logging.INFO,
@@ -16,22 +18,26 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 METRICS = ['mrr', 'p5', 'p1', 'dist']
 
 
-def evaluate_map(encoder_mulitlingual, argument_map, node_types, max_candidates=0):
+def evaluate_map(encoder_mulitlingual, cross_encoder, argument_map, node_types, max_candidates=0):
     results = {}
     node_results = {}
     print('eval', argument_map.name)
     encoder_mulitlingual.encode_argument_map(argument_map)
     print("default setting: all nodes are evaluated, all nodes are considered as candidates")
     results['all'], node_results['all'] = eval_one(
-        Evaluation(argument_map=argument_map, only_leafs=False, max_candidates=max_candidates))
+        RerankEvaluation(argument_map=argument_map, cross_encoder=cross_encoder,
+                         only_leafs=False, max_candidates=max_candidates))
     print("only check for leaf nodes")
-    results['only_leafs'], node_results['only_leafs'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
-                                                                           max_candidates=max_candidates))
+    results['only_leafs'], node_results['only_leafs'] = eval_one(RerankEvaluation(argument_map=argument_map,
+                                                                                  cross_encoder=cross_encoder,
+                                                                                  only_leafs=True,
+                                                                                  max_candidates=max_candidates))
     print("only leaf nodes and only issues and ideas as parents")
     results['only_leafs_limited_types'], node_results['only_leafs_limited_types'] = eval_one(
-        Evaluation(argument_map=argument_map, only_leafs=True,
-                   candidate_node_types=node_types,
-                   max_candidates=max_candidates))
+        RerankEvaluation(argument_map=argument_map, cross_encoder=cross_encoder,
+                         only_leafs=True,
+                         candidate_node_types=node_types,
+                         max_candidates=max_candidates))
     return results, node_results
 
 
