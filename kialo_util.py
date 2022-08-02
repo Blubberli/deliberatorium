@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from argumentMap import KialoMap
 from tqdm.autonotebook import tqdm
@@ -23,3 +24,14 @@ def read_data(args):
                      if '(1)' not in _map.stem]
     print(f'remaining {len(maps)} maps after clean up')
     return argument_maps
+
+
+def remove_url_and_hashtags(text):
+    pattern = r'(?i)\b((?:[a-z][\w-]+:(?:/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:\'".,<>?«»“”‘’]))'
+    match = re.findall(pattern, text)
+    for m in match:
+        url = m[0]
+        text = text.replace(url, '')
+    text = text.replace("()", "")
+    text = text.replace("#", "")
+    return text

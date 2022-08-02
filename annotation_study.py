@@ -21,7 +21,7 @@ from sklearn.metrics import f1_score, classification_report
 import seaborn as sns
 import glob
 from evaluation import Evaluation as eval
-
+from kialo_util import remove_url_and_hashtags
 
 
 # create a mapping from Argument map to main topic
@@ -40,6 +40,8 @@ def read_all_maps(data_path, debug_maps_size=None):
 
 def filter_maps_by_main_topic(main_topic, map2topic, maps):
     """provide a topic and retrieve all corresponding maps"""
+    print(main_topic)
+    print(map2topic)
     filtered_maps = [map for map in maps if int(map.id) in map2topic]
     filtered_maps = [map for map in filtered_maps if map2topic[int(map.id)] == main_topic]
     return filtered_maps
@@ -59,8 +61,11 @@ def filter_maps_by_size(maps, min_size, max_size):
 
 def extract_random_map_from_filtering(maps, min_size, max_size, min_depth, max_depth, topic, map2topic):
     filtered_maps = filter_maps_by_main_topic(main_topic=topic, map2topic=map2topic, maps=maps)
+    print("there are %d maps of the topic %s" % (len(filtered_maps), topic))
     filtered_maps = filter_maps_by_depth(filtered_maps, min_depth, max_depth)
+    print("there are %d maps with between %d and %d depth" % (len(filtered_maps), min_depth, max_depth))
     filtered_maps = filter_maps_by_size(filtered_maps, min_size, max_size)
+    print("there are %d maps with between %d and %d nodes" % (len(filtered_maps), min_size, max_size))
     return random.choice(filtered_maps)
 
 
@@ -90,6 +95,7 @@ def extract_node_samples_from_depth_bins(argument_map, node_type=None):
 def get_informative_dataframe(nodes_list, target_node):
     """For a list of nodes return a data frame with more information about the nodes"""
     df = pd.DataFrame()
+
     df["nodes"] = nodes_list
     df["levels"] = [node.get_level() for node in nodes_list]
     df["node_type"] = [node.type for node in nodes_list]
@@ -99,6 +105,16 @@ def get_informative_dataframe(nodes_list, target_node):
     return df
 
 
+# general target node: (high in the tree)
+# more specific target node: (low in the tree)
+
+# other candidates: 7 close ones (distance <=3), 3 far ones (distance >3)
+
+# problem bot always so many
+
+# remove the links
+#
+
 def extract_candidates(argument_map, target_node_df):
     """
     given an argument map and a dataframe with target nodes to be annotated, extract 10 candidate nodes for each child node.
@@ -107,12 +123,14 @@ def extract_candidates(argument_map, target_node_df):
     other candidates: random sample of
     """
     annotation_data = {}
-    for node in target_node_df["nodes"].values:
+    for i in range(len(target_node_df)):
+        node = target_node_df["nodes"].values[i]
+        coarse_level = target_node_df["coarse_level"].values[i]
         candidates = argument_map.all_children
         # filter for length
-        candidates = [node for node in candidates if len(node.name.split(" ")) > 5]
+        candidates = [n for n in candidates if len(n.name.split(" ")) > 5]
         close_candidates = [candidate for candidate in candidates if
-                            node.shortest_path(candidate) <= 3]
+                            node.shortest_path(candidate) <= 3 and node.shortest_path(candidate) > 1]
         close_candidates = [n for n in close_candidates if n != node and n != node.parent]
         other_candidates = list(set(candidates) - set(close_candidates))
         close_candidates = get_informative_dataframe(close_candidates, node)
@@ -129,10 +147,18 @@ def extract_candidates(argument_map, target_node_df):
             sample_close = close_candidates
             sample_far = other_candidates.sample(sample_size_far)
         annotation_frame = pd.concat([sample_close, sample_far, parent_frame])
+        candidate_comments = annotation_frame["nodes"].values
+        cleaned_comments = [remove_url_and_hashtags(str(el)) for el in candidate_comments]
+        annotation_frame["cleaned_comments"] = cleaned_comments
+        annotation_frame["ID"] = [n.id for n in annotation_frame["nodes"].values]
+        original = [str(el) for el in candidate_comments]
         # shuffle candidates
         annotation_frame = annotation_frame.sample(frac=1).reset_index(drop=True)
         annotation_data[node.id] = {"candidates": annotation_frame, "parent": node.parent.name,
-                                    "parent.ID": node.parent.id, "target": node.name}
+                                    "parent.ID": node.parent.id, "target": node.name,
+                                    "target_clean": remove_url_and_hashtags(node.name), "target.ID": node.id,
+                                    "target.type": node.type, "target.depth": node.get_level(),
+                                    "coarse.level": coarse_level}
     return annotation_data
 
 
@@ -141,16 +167,19 @@ def write_annotation_data(output_dir, annotation_data, map):
         path = os.path.join(output_dir, (node).replace(".", ""))
         os.mkdir(path)
         with open(os.path.join(path, "map_info.txt"), "w") as f:
-            f.write("claim: %s size: %d depth: %d" % (map.name, map.number_of_children(), map.max_depth))
+            f.write("mapID\tclaim\tsize\tdepth\n")
+            f.write("%d\t%s\t%d\t%d\n" % (map.id, map.name, map.number_of_children(), map.max_depth))
         candidate_path = os.path.join(path, "candidates.csv")
         target_node_path = os.path.join(path, "target_node.csv")
         annotation_path = os.path.join(path, "example%s.csv" % (node).replace(".", ""))
 
         annotation_frame = pd.DataFrame()
-        annotation_frame["target"] = [annotation["target"]] + [""] * 9
-        candidates = annotation["candidates"]["nodes"].values
+        annotation_frame["target"] = [remove_url_and_hashtags(annotation["target"])] + [""] * 9
+        candidates = annotation["candidates"]["cleaned_comments"].values
         candidates = [str(el) for el in candidates]
         annotation_frame["candidates"] = candidates
+        annotation_frame["targetID"] = [annotation["target.ID"]] * len(annotation_frame)
+        annotation_frame["candidateID"] = annotation["candidates"]["ID"].values
 
         annotation_frame["BEST PARENT"] = [""] * len(annotation_frame)
         annotation_frame["OTHER SUITABLE PARENTS"] = [""] * len(annotation_frame)
@@ -159,21 +188,31 @@ def write_annotation_data(output_dir, annotation_data, map):
 
         annotation["candidates"].to_csv(candidate_path, sep="\t", index=False)
         with open(target_node_path, "w") as f:
-            f.write("target node\tID\tparent\tparentID\n")
-            f.write("%s\t%s\t%s\t%s\n" % (annotation["target"], node, annotation["parent"], annotation["parent.ID"]))
+            f.write("target node\ttarget node clean\tID\tparent\tparentID\ttarget depth\ttarget type\tcoarseLevel\n")
+            f.write("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" % (
+                annotation["target"], annotation["target_clean"], annotation["target.ID"], annotation["parent"],
+                annotation["parent.ID"], annotation["target.depth"],
+                annotation["target.type"], annotation["coarse.level"]))
 
 
-def sample_annotation_batch(topic, min_size, max_size, number_of_pairs, output_dir, argument_maps, map2unique):
+def sample_annotation_batch(topic, number_small_maps, number_larger_maps, output_dir, argument_maps, map2unique):
     used_maps = set()
-    for i in range(0, number_of_pairs):
+    # extract only maps of that topic
+    topic_maps = filter_maps_by_main_topic(maps=argument_maps, map2topic=map2unique, main_topic=topic)
+    # make sure they are in a 'good depth range'
+    filtered_maps = filter_maps_by_depth(maps=topic_maps, min_depth=5, max_depth=70)
+    # sort them by size
+    sorted_maps = sorted(filtered_maps, key=lambda x: x.number_of_children(), reverse=True)
+    half = int(len(sorted_maps) / 2)
+    small_maps = sorted_maps[:half]
+    large_maps = sorted_maps[half:]
+    for i in range(0, number_small_maps):
         sucess = False
         while not sucess:
-            map = extract_random_map_from_filtering(maps=argument_maps, topic=topic, min_depth=4, max_depth=50,
-                                                    min_size=min_size,
-                                                    max_size=max_size, map2topic=map2unique)
-
+            map = random.choice(small_maps)
             df_pro = extract_node_samples_from_depth_bins(map, node_type=1)
             df_pro = df_pro[(df_pro['coarse_level'] == 'middle') | (df_pro['coarse_level'] == 'specific')]
+            print(df_pro.columns)
 
             df_con = extract_node_samples_from_depth_bins(map, node_type=-1)
             df_con = df_con[(df_con['coarse_level'] == 'middle') | (df_con['coarse_level'] == 'specific')]
@@ -182,7 +221,26 @@ def sample_annotation_batch(topic, min_size, max_size, number_of_pairs, output_d
                 df_con = df_con.sample(n=1)
                 sucess = True
                 used_maps.add(map.id)
-        print(map.name)
+
+        target_node_df = pd.concat([df_con, df_pro])
+
+        annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
+        write_annotation_data(output_dir, annotation_data, map)
+    for i in range(0, number_larger_maps):
+        sucess = False
+        while not sucess:
+            map = random.choice(large_maps)
+            df_pro = extract_node_samples_from_depth_bins(map, node_type=1)
+            df_pro = df_pro[(df_pro['coarse_level'] == 'middle') | (df_pro['coarse_level'] == 'specific')]
+            print(df_pro.columns)
+
+            df_con = extract_node_samples_from_depth_bins(map, node_type=-1)
+            df_con = df_con[(df_con['coarse_level'] == 'middle') | (df_con['coarse_level'] == 'specific')]
+            if len(df_pro) >= 1 and len(df_con) >= 1 and map.id not in used_maps:
+                df_pro = df_pro.sample(n=1)
+                df_con = df_con.sample(n=1)
+                sucess = True
+                used_maps.add(map.id)
 
         target_node_df = pd.concat([df_con, df_pro])
 
@@ -250,8 +308,6 @@ def get_nodeID_partial_textmatch(id2info, partialtext):
         text = info["text"]
         initial_part = partialtext.split(",")[0]
         if initial_part in text:
-            print(text)
-            print(partialtext)
             return id
     return None
 
@@ -357,11 +413,12 @@ def filter_annotation_frame(frame, type=None, depth_bounday=None):
 
 def compute_performance(input_file, type=None, depth=None):
     df = pd.read_csv(input_file, sep="\t")
-    df.dropna(inplace=True)
+    # df.dropna(inplace=True)
     if type or depth:
         df = filter_annotation_frame(df, type, depth)
+    df = filter_annotation_frame(df, None, None, average_distance=True)
     annotators = ["annotation1", "annotation2", "annotation3"]
-    ranks = {"annotation1": [], "annotation2": [], "annotation3":[]}
+    ranks = {"annotation1": [], "annotation2": [], "annotation3": []}
     for i in range(len(df)):
         candidateID = df.candidateID.values[i]
         parentID = df.goldParent.values[i]
@@ -380,18 +437,18 @@ def compute_performance(input_file, type=None, depth=None):
         prec5 = eval.precision_at_rank(annotations, 5)
         print("annotator: %s; precision at rank1: %.2f; precision at rank5: %.2f" % (annotator, prec1, prec5))
 
-
     # for annotator in annotators:
 
 
-def compute_agreement(input_file):
+def compute_agreement(input_file, type=None, depth=None):
     """
 
     :param input_file: a csv file with each row having a child parent pair and the corresponding annotation for each annotator
     :return:
     """
     df = pd.read_csv(input_file, sep="\t")
-    df = filter_annotation_frame(df, depth_bounday="large")
+    if type or depth:
+        df = filter_annotation_frame(df, type, depth)
 
     # df.dropna(inplace=True)
     annotators = ["annotation1", "annotation2", "annotation3"]
@@ -438,11 +495,12 @@ def compute_agreement(input_file):
 
 
 def plot_agreement_matrices():
-    results = compute_agreement("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.csv")
+    results = compute_agreement(
+        input_file="/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.tsv",
+        depth="small")
     sns.set(font_scale=1.5)
     labels = ["ann1", "ann2", "ann3"]
     for metric, matrix in results.items():
-        print(matrix)
         sns.heatmap(matrix, xticklabels=labels, yticklabels=labels, annot=True, cmap="Blues").set_title("%s" % metric)
         plt.tight_layout()
         plt.savefig("/Users/falkne/PycharmProjects/deliberatorium/data/plots/annotations_study/large/%s.png" % metric,
@@ -467,6 +525,7 @@ def get_annotation_info_dic():
             parent_id = gold["parentID"].values[0]
             childnode = [el for el in map.all_children if el.id == str(child_id)]
             child_text = gold["target node"].values[0]
+
             old_id = None
             if not childnode:
                 for el in map.all_children:
@@ -492,59 +551,70 @@ def get_annotation_info_dic():
     return child2info, candidate2info
 
 
+def get_performance_for_every_setup():
+    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.tsv")
+    print("\t")
+    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.tsv", type=1)
+    print("\t")
+    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.tsv",
+                        type=-1)
+    print("\t")
+
+    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.tsv",
+                        depth="small")
+    print("\t")
+
+    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.tsv",
+                        depth="large")
+
+
+def get_used_maps_ids(input_file):
+    df = pd.read_csv(input_file, sep="\t")
+    ids = df.childID.values
+    map_ids = set([int(el) for el in ids])
+    return map_ids
+
+
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import seaborn as sns
 
     """
-    data_path = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialoV2/english"
+    data_path = "/Users/falkne/PycharmProjects/deliberatorium/data/kialoV2/english"
     # argument_maps = read_all_maps(data_path, debug_maps_size=900)
+    argument_maps = read_all_maps(data_path)
+    used_maps = get_used_maps_ids(
+        "/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.tsv")
+    ids = [el.id for el in argument_maps]
+    argument_maps = [el for el in argument_maps if el.id not in used_maps]
     get_topic2claims("/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2")
-    kialo2topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialoID2MainTopic.csv"
-    main_topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
+    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialoID2MainTopic.csv"
+    main_topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
 
     map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
+    print(map2unique)
 
-    annotation_dir = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2"
-    # sample_annotation_batch(topic="immigration", argument_maps=argument_maps, output_dir=annotation_dir, max_size=200,
-    #                        min_size=70, number_of_pairs=1, map2unique=map2unique)
+    annotation_dir = "/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot2"
+
+    sample_annotation_batch(topic="gender", argument_maps=argument_maps, output_dir=annotation_dir, number_small_maps=3,
+                            number_larger_maps=2,
+                            map2unique=map2unique)
 
     # convert_annotationdata_to_googleforms(annotation_dir)
 
     # p = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps/should-the-death-penalty-be-abolished-28302.txt"
     """
-    # map_answer_to_input("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/AnnotationKialo50Instances.xlsx",
-    #                    "/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/kialoAnswers/merged_answers.csv")
-    # child2info, cand2info = get_annotation_info_dic()
-    # compute_agreement()
-    # get_annotations_with_id(max_documents=10,
-    #                        answer_dir="/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/kialoAnswers",
-    #                        child2info=child2info, cand2info=cand2info,
-    #                       input_file="/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/AnnotationKialo50Instances.xlsx")
-    # plot_agreement_matrices()
-    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.csv", type=1)
-    print("\t")
-    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.csv", type=-1)
-    print("\t")
 
-    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.csv", depth="small")
-    print("\t")
+    # 200
+    # add topics: concrete
+    #
+    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialoID2MainTopic.csv"
+    main_topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
+    map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
 
-    compute_performance("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.csv", depth="large")
+    # 8 per map (4 general, 4 specific)
+    # keep 5 topics
+    # confidence rating
+    # keep track of annotator
 
 
-    # compute_agreement("/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.csv")
-    # merge_googleform_answers(max_documents=10, answer_dir="/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/kialoAnswers")
-    # human rights, enviroment, democracy, finance
-
-    # goal: I need to find the ID for my annotation study (the real ID)
-    # have the ID for each node that got annotated in the correct order
-    # compute agreement for different weights
-    # - weighted cohens kappa
-    # - correlation
-    # - F1 score for each class
-    # - percentage of cases for which ppl agree on each of the categories
-
-    # performance: precision @1, prec@5, MRR?
-    # drop instances were we do not (yet) have the real parent ID
-    # convert the annotation into a list of True / False
