@@ -10,7 +10,7 @@ import statistics
 from pathlib import Path
 
 import wandb
-from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample
+from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample, CrossEncoder
 from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 from sklearn.model_selection import train_test_split
@@ -51,7 +51,7 @@ def main():
 
     model_name = args['model_name_or_path']
     train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
-    max_seq_length = 75
+    max_seq_length = args['max_seq_length']
     num_epochs = args['num_train_epochs']
 
     argument_maps = read_data(args)
@@ -118,7 +118,7 @@ def main():
         train_loss = losses.MultipleNegativesRankingLoss(model)
 
         dev_evaluator = (EmbeddingSimilarityEvaluator.from_input_examples(
-            dev_samples, batch_size=train_batch_size, name=args['argument_map_dev'])
+            dev_samples, batch_size=train_batch_size, name='dev')
                          if args['use_dev'] else None)
 
         print(f'{len(train_dataloader)=}')
@@ -128,20 +128,24 @@ def main():
 
         model.fit(train_objectives=[(train_dataloader, train_loss)],
                   epochs=num_epochs,
+                  evaluator=dev_evaluator,
+                  evaluation_steps=args['eval_steps'] if args['eval_steps'] else
+                  (int(len(train_dataloader) * 0.1) if dev_evaluator else 0),
                   warmup_steps=warmup_steps,
                   output_path=model_save_path,
                   use_amp=False  # Set to True, if your GPU supports FP16 operations
                   )
     # eval
     all_results = []
+    cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
     if args['do_eval']:
         all_results.extend(
-            eval(model_save_path, args, argument_maps_test,
+            eval(model_save_path, cross_encoder, args, argument_maps_test,
                  domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all',
                  max_candidates=args['max_candidates']))
         if args['training_domain_index'] >= 0:
             for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
-                all_results.extend(eval(model_save_path, args, domain_argument_maps[domain], domain=domain,
+                all_results.extend(eval(model_save_path, cross_encoder, args, domain_argument_maps[domain], domain=domain,
                                         max_candidates=args['max_candidates']))
         avg_results = get_avg(all_results)
         (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
@@ -153,28 +157,32 @@ def prepare_samples(argument_maps, split, args):
     for i, argument_map in enumerate(tqdm(argument_maps, f'preparing samples {split}')):
         argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
         for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
-            if args['hard_negatives']:
+            if split == 'dev' or args['hard_negatives']:
                 non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
                 if len(non_parents) > args['hard_negatives_size'] > 0:
                     non_parents = random.sample(non_parents, args['hard_negatives_size'])
-                for non_parent in non_parents:
+                if split == 'dev':
+                    maps_samples[argument_map.label].extend([InputExample(
+                        texts=[x.name for x in [child, non_parent]], label=0) for non_parent in non_parents])
+                    maps_samples[argument_map.label].append(InputExample(
+                        texts=[x.name for x in [child, parent]], label=1))
+                else:
                     # NOTE original code also adds opposite
-                    maps_samples[argument_map.label].append(
-                        InputExample(texts=[x.name for x in [child, parent, non_parent]]))
+                    maps_samples[argument_map.label].extend([InputExample(
+                        texts=[x.name for x in [child, parent, non_parent]]) for non_parent in non_parents])
             else:
-                maps_samples[argument_map.label].append(
-                    InputExample(texts=[x.name for x in [child, parent]]))
+                maps_samples[argument_map.label].append(InputExample(texts=[x.name for x in [child, parent]]))
     if args['debug_size']:
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
     return maps_samples
 
 
-def eval(output_dir, args, argument_maps, domain, max_candidates):
+def eval(output_dir, cross_encoder, args, argument_maps, domain, max_candidates):
     model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
                                 output_dir)
     results_path = Path(output_dir + '-results') / domain
     results_path.mkdir(exist_ok=True, parents=True)
-    encoder_mulitlingual = MapEncoder(max_seq_len=128,
+    encoder_mulitlingual = MapEncoder(max_seq_len=args['max_seq_length'],
                                       sbert_model_identifier=None,
                                       model=model,
                                       normalize_embeddings=True)
@@ -185,6 +193,7 @@ def eval(output_dir, args, argument_maps, domain, max_candidates):
         for j, eval_argument_map in enumerate(tqdm(argument_maps, f'eval maps in domain {domain}')):
             try:
                 results, nodes_all_results[eval_argument_map.label] = evaluate_map(encoder_mulitlingual,
+                                                                                   cross_encoder,
                                                                                    eval_argument_map, {1, -1},
                                                                                    max_candidates=max_candidates)
             except Exception as e:
