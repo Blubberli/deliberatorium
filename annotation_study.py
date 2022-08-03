@@ -128,7 +128,7 @@ def extract_candidates(argument_map, target_node_df):
         coarse_level = target_node_df["coarse_level"].values[i]
         candidates = argument_map.all_children
         # filter for length
-        candidates = [n for n in candidates if len(n.name.split(" ")) > 5]
+        # candidates = [n for n in candidates if len(n.name.split(" ")) > 5]
         close_candidates = [candidate for candidate in candidates if
                             node.shortest_path(candidate) <= 3 and node.shortest_path(candidate) > 1]
         close_candidates = [n for n in close_candidates if n != node and n != node.parent]
@@ -151,7 +151,6 @@ def extract_candidates(argument_map, target_node_df):
         cleaned_comments = [remove_url_and_hashtags(str(el)) for el in candidate_comments]
         annotation_frame["cleaned_comments"] = cleaned_comments
         annotation_frame["ID"] = [n.id for n in annotation_frame["nodes"].values]
-        original = [str(el) for el in candidate_comments]
         # shuffle candidates
         annotation_frame = annotation_frame.sample(frac=1).reset_index(drop=True)
         annotation_data[node.id] = {"candidates": annotation_frame, "parent": node.parent.name,
@@ -195,34 +194,43 @@ def write_annotation_data(output_dir, annotation_data, map):
                 annotation["target.type"], annotation["coarse.level"]))
 
 
-def sample_annotation_batch(topic, number_small_maps, number_larger_maps, output_dir, argument_maps, map2unique):
+def sample_annotation_batch_tolerant(topic, number_small_maps, number_larger_maps, output_dir, argument_maps,
+                                     map2unique):
     used_maps = set()
     # extract only maps of that topic
     topic_maps = filter_maps_by_main_topic(maps=argument_maps, map2topic=map2unique, main_topic=topic)
     # make sure they are in a 'good depth range'
-    filtered_maps = filter_maps_by_depth(maps=topic_maps, min_depth=5, max_depth=70)
+    filtered_maps = filter_maps_by_depth(maps=topic_maps, min_depth=5, max_depth=48)
+    # make sure they have at least a size of 40 nodes
+    filtered_maps = filter_maps_by_size(maps=filtered_maps, min_size=40, max_size=10000)
     # sort them by size
-    sorted_maps = sorted(filtered_maps, key=lambda x: x.number_of_children(), reverse=True)
+    sorted_maps = sorted(filtered_maps, key=lambda x: x.number_of_children())
     half = int(len(sorted_maps) / 2)
     small_maps = sorted_maps[:half]
     large_maps = sorted_maps[half:]
+    print("the smallest map is %d" % small_maps[0].number_of_children())
+    print("the largest map is %d" % large_maps[-1].number_of_children())
+    print("number of maps left for sampling: %d" % len(sorted_maps))
+
     for i in range(0, number_small_maps):
         sucess = False
         while not sucess:
-            map = random.choice(small_maps)
+            map = random.choice(large_maps)
             df_pro = extract_node_samples_from_depth_bins(map, node_type=1)
             df_pro = df_pro[(df_pro['coarse_level'] == 'middle') | (df_pro['coarse_level'] == 'specific')]
-            print(df_pro.columns)
 
             df_con = extract_node_samples_from_depth_bins(map, node_type=-1)
             df_con = df_con[(df_con['coarse_level'] == 'middle') | (df_con['coarse_level'] == 'specific')]
-            if len(df_pro) >= 1 and len(df_con) >= 1 and map.id not in used_maps:
-                df_pro = df_pro.sample(n=1)
-                df_con = df_con.sample(n=1)
+
+            if len(df_pro) >= 4 and len(df_con) >= 4 and map.id not in used_maps:
+                df_pro = df_pro.sample(n=4)
+                df_con = df_con.sample(n=4)
                 sucess = True
                 used_maps.add(map.id)
+                print("%d. map of size %d and depth %d" % (i, map.number_of_children(), map.max_depth))
 
-        target_node_df = pd.concat([df_con, df_pro])
+        target_node_df = pd.concat([df_pro, df_con])
+        print("annotation frame of size %d" % len(target_node_df))
 
         annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
         write_annotation_data(output_dir, annotation_data, map)
@@ -232,17 +240,95 @@ def sample_annotation_batch(topic, number_small_maps, number_larger_maps, output
             map = random.choice(large_maps)
             df_pro = extract_node_samples_from_depth_bins(map, node_type=1)
             df_pro = df_pro[(df_pro['coarse_level'] == 'middle') | (df_pro['coarse_level'] == 'specific')]
-            print(df_pro.columns)
 
             df_con = extract_node_samples_from_depth_bins(map, node_type=-1)
             df_con = df_con[(df_con['coarse_level'] == 'middle') | (df_con['coarse_level'] == 'specific')]
-            if len(df_pro) >= 1 and len(df_con) >= 1 and map.id not in used_maps:
-                df_pro = df_pro.sample(n=1)
-                df_con = df_con.sample(n=1)
+
+            if len(df_pro) >= 4 and len(df_con) >= 4 and map.id not in used_maps:
+                df_pro = df_pro.sample(n=4)
+                df_con = df_con.sample(n=4)
                 sucess = True
                 used_maps.add(map.id)
+                print("%d. map of size %d and depth %d" % (i, map.number_of_children(), map.max_depth))
 
-        target_node_df = pd.concat([df_con, df_pro])
+        target_node_df = pd.concat([df_pro, df_con])
+        print("annotation frame of size %d" % len(target_node_df))
+
+        annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
+        write_annotation_data(output_dir, annotation_data, map)
+
+
+def sample_annotation_batch(topic, number_small_maps, number_larger_maps, output_dir, argument_maps, map2unique):
+    used_maps = set()
+    # extract only maps of that topic
+    topic_maps = filter_maps_by_main_topic(maps=argument_maps, map2topic=map2unique, main_topic=topic)
+    # make sure they are in a 'good depth range'
+    filtered_maps = filter_maps_by_depth(maps=topic_maps, min_depth=5, max_depth=48)
+    # make sure they have at least a size of 40 nodes
+    filtered_maps = filter_maps_by_size(maps=filtered_maps, min_size=40, max_size=10000)
+    # sort them by size
+    sorted_maps = sorted(filtered_maps, key=lambda x: x.number_of_children())
+    half = int(len(sorted_maps) / 2)
+    small_maps = sorted_maps[:half]
+    large_maps = sorted_maps[half:]
+    print("the smallest map is %d" % small_maps[0].number_of_children())
+    print("the largest map is %d" % large_maps[-1].number_of_children())
+    print("number of maps left for sampling: %d" % len(sorted_maps))
+
+    for i in range(0, number_small_maps):
+        sucess = False
+        while not sucess:
+            map = random.choice(small_maps)
+            df_pro = extract_node_samples_from_depth_bins(map, node_type=1)
+            df_pro_middle = df_pro[(df_pro['coarse_level'] == 'middle')]
+            df_pro_specific = df_pro[(df_pro['coarse_level'] == 'specific')]
+
+            df_con = extract_node_samples_from_depth_bins(map, node_type=-1)
+            df_con_middle = df_con[(df_con['coarse_level'] == 'middle')]
+            df_con_specific = df_con[(df_con['coarse_level'] == 'specific')]
+            print(len(df_con_middle), len(df_pro_middle), len(df_con_specific), len(df_pro_specific))
+            if len(df_pro_middle) >= 2 and len(df_pro_specific) >= 2 and len(df_con_middle) >= 2 and len(
+                    df_con_specific) >= 2 and map.id not in used_maps:
+                df_pro_middle = df_pro_middle.sample(n=2)
+                df_pro_specific = df_pro_specific.sample(n=2)
+
+                df_con_middle = df_con_middle.sample(n=2)
+                df_con_specific = df_con_specific.sample(n=2)
+                sucess = True
+                used_maps.add(map.id)
+                print("%d. map of size %d and depth %d" % (i, map.number_of_children(), map.max_depth))
+
+        target_node_df = pd.concat([df_pro_middle, df_pro_specific, df_con_middle, df_con_specific])
+        print("annotation frame of size %d" % len(target_node_df))
+
+        annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
+        write_annotation_data(output_dir, annotation_data, map)
+    for i in range(0, number_larger_maps):
+        sucess = False
+        while not sucess:
+            map = random.choice(large_maps)
+            df_pro = extract_node_samples_from_depth_bins(map, node_type=1)
+            df_pro_middle = df_pro[(df_pro['coarse_level'] == 'middle')]
+            df_pro_specific = df_pro[(df_pro['coarse_level'] == 'specific')]
+
+            df_con = extract_node_samples_from_depth_bins(map, node_type=-1)
+            df_con_middle = df_con[(df_con['coarse_level'] == 'middle')]
+            df_con_specific = df_con[(df_con['coarse_level'] == 'specific')]
+            print(len(df_con_middle), len(df_pro_middle), len(df_con_specific), len(df_pro_specific))
+
+            if len(df_pro_middle) >= 2 and len(df_pro_specific) >= 2 and len(df_con_middle) >= 2 and len(
+                    df_con_specific) >= 2 and map.id not in used_maps:
+                df_pro_middle = df_pro_middle.sample(n=2)
+                df_pro_specific = df_pro_specific.sample(n=2)
+
+                df_con_middle = df_con_middle.sample(n=2)
+                df_con_specific = df_con_specific.sample(n=2)
+                sucess = True
+                used_maps.add(map.id)
+                print("%d. map of size %d and depth %d" % (i, map.number_of_children(), map.max_depth))
+
+        target_node_df = pd.concat([df_pro_middle, df_pro_specific, df_con_middle, df_con_specific])
+        print("annotation frame of size %d" % len(target_node_df))
 
         annotation_data = extract_candidates(argument_map=map, target_node_df=target_node_df)
         write_annotation_data(output_dir, annotation_data, map)
@@ -251,21 +337,32 @@ def sample_annotation_batch(topic, number_small_maps, number_larger_maps, output
 def convert_annotationdata_to_googleforms(annot_dir):
     # form questions	question type	answer start	answer end	Description
     print(annot_dir)
-    output_file = open(annot_dir + "/googleformssheet.csv", "w")
-    output_file.write("form questions\tquestion type\tanswer start\tanswer end\tDescription\n")
+    output_file = open(annot_dir + "/googleformssheet.tsv", "w")
+    output_file.write(
+        "form questions\tquestion type\tanswer start\tanswer end\tDescription\tclaimID\ttargetID\tcandidateIDs\n")
+    confidence_row = "Confidence Rating\tSCALE\t1,3,Unsure,Certain\t\tHow confident are you in your response?\t\t\t\n"
     for root, dirs, files in os.walk(annot_dir):
         for file in files:
             if "example" in file:
                 example_file = os.path.join(root, file)
-                map_info = example_file.replace(file, "map_info.txt")
-                claim = open(map_info).readlines()[0].split("size")[0].strip()
+                map_info = pd.read_csv(example_file.replace(file, "map_info.txt"), sep="\t")
+                claim = map_info["claim"].values[0]
+                mapID = map_info["mapID"].values[0]
                 df = pd.read_csv(example_file, sep="\t")
                 target = df["target"].values[0]
-                candidates = df["candidates"].values
+                candidates = list(df["candidates"].values)
+                # remove any additional line breaks in candidates and target and claim
+                claim = claim.replace("\n", " ")
+                target = target.replace("\n", " ")
+                candidates = [el.replace("\n", " ") for el in candidates]
+                targetID = df["targetID"].values[0]
+                candidateIDs = list(df["candidateID"].values)
                 canidate_string = "#".join(candidates)
+                id_string = "##".join([str(el) for el in candidateIDs])
                 selectstring = "BEST PARENT#SUITABLE PARENT#LESS SUITABLE PARENT"
-                output_file.write("%s\t%s\t%s\t%s\t%s\n" % (
-                    target, "checkbox grid", canidate_string, selectstring, claim))
+                output_file.write("%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\n" % (
+                    target, "checkbox grid", canidate_string, selectstring, claim, mapID, targetID, id_string))
+                output_file.write(confidence_row)
 
     output_file.close()
 
@@ -575,46 +672,94 @@ def get_used_maps_ids(input_file):
     return map_ids
 
 
+def create_annotation_batch():
+    # topics = ["gender", "economics", "immigration", "politics", "environment"]
+    topics = ["environment"]
+    outpath = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation200instances"
+    data_path = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialoV2/english"
+    argument_maps = read_all_maps(data_path, debug_maps_size=1100)
+    kialo2topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/dataKialoV2/mapID2topicTags/ENmapID2topicTags.txt"
+    main_topics = "/Users/johannesfalk/PycharmProjects/deliberatorium/dataKialoV2/maintopic2subtopic.tsv"
+    map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
+    for topic in topics:
+        sample_annotation_batch_tolerant(topic=topic, argument_maps=argument_maps,
+                                         output_dir="%s/%s" % (outpath, topic),
+                                         number_small_maps=3,
+                                         number_larger_maps=2,
+                                         map2unique=map2unique)
+
+
+def analyze_annotation_sample():
+    root = "/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation200instances"
+    annotated_maps = {}
+    annotated_target_nodes = []
+    annotated_candidates = []
+    for path, subdirs, files in os.walk(root):
+        for name in files:
+            df = pd.read_csv(os.path.join(path, name), sep="\t")
+            if "map_info" in name:
+                topic = path.split("/")[-2]
+                df["topic"] = [topic] * len(df)
+                annotated_maps[df["mapID"].values[0]] = df
+            elif "candidates" in name:
+                topic = path.split("/")[-2]
+                df["topic"] = [topic] * len(df)
+                annotated_candidates.append(df)
+            elif "target" in name:
+                topic = path.split("/")[-2]
+                df["topic"] = [topic] * len(df)
+                annotated_target_nodes.append(df)
+    target_df = pd.concat(annotated_target_nodes)
+    candidate_df = pd.concat(annotated_candidates)
+    map_df = pd.concat(list(annotated_maps.values()))
+    candidate_df.to_csv(os.path.join(root, "all_candidates.csv"), sep="\t", index=False)
+    target_df.to_csv(os.path.join(root, "all_targets.csv"), sep="\t", index=False)
+    map_df.to_csv(os.path.join(root, "all_maps.csv"), sep="\t", index=False)
+
+
+def create_plots(map_df, target_df, candidate_df):
+    sns.countplot(x="depth", data=map_df)
+    sns.countplot(x="target depth", data=target_df)
+    plt.show()
+    # plt.show()
+
+    map_df["quartiles"] = pd.qcut(map_df["size"].values, q=4)
+    print(map_df.quartiles.values)
+    newbins = [91, 226, 285, 934, 2421]
+    newlabels = []
+    for i in range(len(newbins) - 1):
+        b = "%d-%d" % (newbins[i], newbins[i + 1])
+        newlabels.append(b)
+    map_df["quartiles"] = pd.cut(map_df["size"], newbins, labels=newlabels)
+    sns.countplot(map_df.quartiles.values)
+    plt.title("#maps: number of nodes")
+    plt.show()
+
+    candidate_df["quartiles"] = pd.qcut(candidate_df["distance"].values, q=4)
+    print(candidate_df.quartiles.values)
+    newbins = [2, 3, 4, 7, 26]
+    newlabels = []
+    for i in range(len(newbins) - 1):
+        b = "%d-%d" % (newbins[i], newbins[i + 1])
+        newlabels.append(b)
+    candidate_df["quartiles"] = pd.cut(candidate_df["distance"], newbins, labels=newlabels)
+    sns.countplot(candidate_df.quartiles.values)
+    plt.title("#maps: number of nodes")
+    plt.show()
+
+
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    """
-    data_path = "/Users/falkne/PycharmProjects/deliberatorium/data/kialoV2/english"
-    # argument_maps = read_all_maps(data_path, debug_maps_size=900)
-    argument_maps = read_all_maps(data_path)
-    used_maps = get_used_maps_ids(
-        "/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot/anntotation_with_id.tsv")
-    ids = [el.id for el in argument_maps]
-    argument_maps = [el for el in argument_maps if el.id not in used_maps]
-    get_topic2claims("/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation_kialoV2")
-    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialoID2MainTopic.csv"
-    main_topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
-
-    map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
-    print(map2unique)
-
-    annotation_dir = "/Users/falkne/PycharmProjects/deliberatorium/annotation/pilot2"
-
-    sample_annotation_batch(topic="gender", argument_maps=argument_maps, output_dir=annotation_dir, number_small_maps=3,
-                            number_larger_maps=2,
-                            map2unique=map2unique)
-
-    # convert_annotationdata_to_googleforms(annotation_dir)
-
-    # p = "/Users/johannesfalk/PycharmProjects/deliberatorium/kialo_maps/should-the-death-penalty-be-abolished-28302.txt"
-    """
+    convert_annotationdata_to_googleforms(
+        "/Users/johannesfalk/PycharmProjects/deliberatorium/data/annotation200instances")
 
     # 200
     # add topics: concrete
     #
-    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialoID2MainTopic.csv"
-    main_topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
-    map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
 
     # 8 per map (4 general, 4 specific)
     # keep 5 topics
     # confidence rating
     # keep track of annotator
-
-
