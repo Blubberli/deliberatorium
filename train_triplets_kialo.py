@@ -54,6 +54,18 @@ def main():
     max_seq_length = args['max_seq_length']
     num_epochs = args['num_train_epochs']
 
+    model_save_path = get_model_save_path(model_name, args)
+    logging.info(f'{model_save_path=}')
+    logging.getLogger().handlers[0].flush()
+
+    if args['local']:
+        os.environ['WANDB_MODE'] = 'disabled'
+    wandb.init(project='argument-maps', name=model_save_path,
+               # to fix "Error communicating with wandb process"
+               # see https://docs.wandb.ai/guides/track/launch#init-start-error
+               settings=wandb.Settings(start_method="fork"))
+    wandb.config.update(args | {'data': 'kialoV2'})
+
     argument_maps = read_data(args)
 
     # kialo domains
@@ -76,6 +88,7 @@ def main():
         args['training_domain'] = main_domains[args['training_domain_index']]
         logging.info(f"{args['training_domain']=}")
         logging.info(f"{len(argument_maps)=} maps in domain args['training_domain_index']={args['training_domain']}")
+        wandb.config.update(args | {'data': 'kialoV2'})
 
     # split data
     argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=seed) \
@@ -86,18 +99,6 @@ def main():
         argument_maps_dev = []
     logging.info(f'train/dev/test using '
                  f'{len(argument_maps_train)=} {len(argument_maps_dev)=} {len(argument_maps_test)=}')
-
-    model_save_path = get_model_save_path(model_name, args)
-    logging.info(f'{model_save_path=}')
-    logging.getLogger().handlers[0].flush()
-
-    if args['local']:
-        os.environ['WANDB_MODE'] = 'disabled'
-    wandb.init(project='argument-maps', name=model_save_path,
-               # to fix "Error communicating with wandb process"
-               # see https://docs.wandb.ai/guides/track/launch#init-start-error
-               settings=wandb.Settings(start_method="fork"))
-    wandb.config.update(args | {'data': 'kialoV2'})
 
     if args['do_train']:
 
