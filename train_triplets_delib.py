@@ -14,7 +14,7 @@ from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 
 from argumentMap import DeliberatoriumMap
-from baseline import evaluate_map
+from eval_util import evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 

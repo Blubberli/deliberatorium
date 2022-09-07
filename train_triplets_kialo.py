@@ -18,7 +18,7 @@ from tqdm import tqdm
 from transformers import set_seed
 
 from argumentMap import KialoMap
-from baseline import evaluate_map, METRICS
+from eval_util import METRICS, evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
