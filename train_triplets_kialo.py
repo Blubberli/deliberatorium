@@ -40,6 +40,7 @@ def add_more_args(parser):
     parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
+    parser.add_argument('--rerank', type=lambda x: (str(x).lower() == 'true'), default=False)
 
 
 def main():
@@ -132,16 +133,18 @@ def main():
                   )
     # eval
     all_results = []
-    cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2') if args['rerank'] else None
     if args['do_eval']:
         all_results.extend(
-            eval(model_save_path, cross_encoder, args, data_splits['test'],
+            eval(model_save_path, args, data_splits['test'],
                  domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all',
-                 max_candidates=args['max_candidates']))
+                 max_candidates=args['max_candidates'],
+                 cross_encoder=cross_encoder))
         if args['training_domain_index'] >= 0:
             for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
-                all_results.extend(eval(model_save_path, cross_encoder, args, domain_argument_maps[domain], domain=domain,
-                                        max_candidates=args['max_candidates']))
+                all_results.extend(eval(model_save_path, args, domain_argument_maps[domain], domain=domain,
+                                        max_candidates=args['max_candidates'],
+                                        cross_encoder=cross_encoder))
         avg_results = get_avg(all_results)
         (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
         wandb.log({'test': {'avg': avg_results}})
@@ -210,7 +213,7 @@ def prepare_samples(argument_maps, split, args):
     return maps_samples
 
 
-def eval(output_dir, cross_encoder, args, argument_maps, domain, max_candidates):
+def eval(output_dir, args, argument_maps, domain, max_candidates, cross_encoder: CrossEncoder):
     model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
                                 output_dir)
     results_path = Path(output_dir + '-results') / domain
@@ -226,9 +229,9 @@ def eval(output_dir, cross_encoder, args, argument_maps, domain, max_candidates)
         for j, eval_argument_map in enumerate(tqdm(argument_maps, f'eval maps in domain {domain}')):
             try:
                 results, nodes_all_results[eval_argument_map.label] = evaluate_map(encoder_mulitlingual,
-                                                                                   cross_encoder,
                                                                                    eval_argument_map, {1, -1},
-                                                                                   max_candidates=max_candidates)
+                                                                                   max_candidates=max_candidates,
+                                                                                   cross_encoder=cross_encoder)
             except Exception as e:
                 logging.error('cannot evaluate map ' + eval_argument_map.label)
                 raise e
