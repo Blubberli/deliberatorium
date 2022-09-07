@@ -92,12 +92,12 @@ def main():
         logging.info(f"{len(argument_maps)=} maps in domain args['training_domain_index']={args['training_domain']}")
         wandb.config.update(args | {'data': 'kialoV2'})
 
-    argument_maps_dev, argument_maps_test, argument_maps_train = split_data(argument_maps, args, seed)
+    data_splits = split_data(argument_maps, args, model_save_path, seed)
 
     if args['do_train']:
 
-        maps_samples = prepare_samples(argument_maps_train, 'train', args)
-        maps_samples_dev = prepare_samples(argument_maps_dev, 'dev', args)
+        maps_samples = prepare_samples(data_splits['train'], 'train', args)
+        maps_samples_dev = prepare_samples(data_splits['dev'], 'dev', args)
 
         word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
         pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
@@ -135,7 +135,7 @@ def main():
     cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
     if args['do_eval']:
         all_results.extend(
-            eval(model_save_path, cross_encoder, args, argument_maps_test,
+            eval(model_save_path, cross_encoder, args, data_splits['test'],
                  domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all',
                  max_candidates=args['max_candidates']))
         if args['training_domain_index'] >= 0:
@@ -147,9 +147,10 @@ def main():
         wandb.log({'test': {'avg': avg_results}})
 
 
-def split_data(argument_maps: list[KialoMap], args: dict, seed: int):
+def split_data(argument_maps: list[KialoMap], args: dict, output_dir: str, seed: int):
     test_size = 0.2
-    annotated_maps = []
+    data_splits = {}
+    annotated_maps, remaining_maps = [], argument_maps
     if args['annotated_samples_in_test']:
         annotated_maps_ids = read_annotated_maps_ids(args['local'])
         not_annotated_maps, annotated_maps = [], []
@@ -160,19 +161,28 @@ def split_data(argument_maps: list[KialoMap], args: dict, seed: int):
         logging.info(f'keep annotated samples in test: {len(annotated_maps)=} + {more_test_maps_num} for {test_size=}')
         # change test_size from percentage to absolute number of maps to include beside the annotated samples
         test_size = more_test_maps_num
-        argument_maps = not_annotated_maps
+        remaining_maps = not_annotated_maps
 
-    argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=test_size, random_state=seed) \
-        if not args['no_data_split'] else (argument_maps, argument_maps)
-    argument_maps_test = annotated_maps + argument_maps_test
+    data_splits['train'], data_splits['test'] = (
+        train_test_split(remaining_maps, test_size=test_size, random_state=seed)
+        if not args['no_data_split'] else (remaining_maps, remaining_maps))
+    data_splits['test'] = annotated_maps + data_splits['test']
 
     if args['use_dev']:
-        argument_maps_train, argument_maps_dev = train_test_split(argument_maps_train, test_size=0.2, random_state=seed)
+        data_splits['train'], data_splits['dev'] = train_test_split(data_splits['train'],
+                                                                    test_size=0.2, random_state=seed)
     else:
-        argument_maps_dev = []
-    logging.info(f'train/dev/test using '
-                 f'{len(argument_maps_train)=} {len(argument_maps_dev)=} {len(argument_maps_test)=}')
-    return argument_maps_dev, argument_maps_test, argument_maps_train
+        data_splits['dev'] = []
+    logging.info('train/dev/test using sizes: ' + ' '.join([f'{k}={len(v)} ({(len(v) / len(argument_maps)):.2f})'
+                                                            for k, v in data_splits.items()]))
+
+    # save split ids
+    path = Path(output_dir + '-data')
+    path.mkdir(exist_ok=True, parents=True)
+    for split_name, split in data_splits.items():
+        (path/f'{split_name}.json').write_text(json.dumps([x.id for x in split]))
+
+    return data_splits
 
 
 def prepare_samples(argument_maps, split, args):
