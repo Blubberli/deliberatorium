@@ -1,5 +1,8 @@
 import os
 import re
+
+import pandas as pd
+
 from pathlib import Path
 from argumentMap import KialoMap
 from tqdm.autonotebook import tqdm
@@ -8,8 +11,7 @@ LANGS = ['english', 'french', 'german', 'italian', 'other']
 
 
 def read_data(args):
-    data_path = (Path.home() / "data/e-delib/kialo/kialoV2" if args['local'] else
-                 Path("/mount/projekte/e-delib/data/kialo/kialoV2"))
+    data_path = get_base_data_path(args['local']) / 'kialoV2'
 
     assert args['lang'] in [*LANGS, None]
 
@@ -22,7 +24,8 @@ def read_data(args):
     if args['debug_maps_size']:
         maps = sorted(maps, key=os.path.getsize)
         if args['debug_map_index']:
-            maps = list(data_path.glob(f"**/{args['debug_map_index']}.pkl")) + maps
+            maps = list(data_path.glob(f"**/{args['debug_map_index']}.pkl")) + \
+                   [x for x in maps if x.stem != args['debug_map_index']]
         maps = maps[:args['debug_maps_size']]
 
     argument_maps = [KialoMap(str(_map), _map.stem) for _map in tqdm(maps, f'processing maps')
@@ -30,6 +33,18 @@ def read_data(args):
                      if '(1)' not in _map.stem]
     print(f'remaining {len(maps)} maps after clean up')
     return argument_maps
+
+
+def read_annotated_maps_ids(local: bool):
+    data_path = get_base_data_path(local) / 'annotation/annotation200instances'
+    annotated_maps_df = pd.read_csv(data_path / 'all_maps.csv', sep='\t')
+    ids = annotated_maps_df['mapID'].to_list()
+    return ids
+
+
+def get_base_data_path(local: bool):
+    return (Path.home() / "data/e-delib/kialo" if local else
+            Path("/mount/projekte/e-delib/data/kialo"))
 
 
 def remove_url_and_hashtags(text):

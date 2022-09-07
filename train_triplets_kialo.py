@@ -17,11 +17,12 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from transformers import set_seed
 
+from argumentMap import KialoMap
 from baseline import evaluate_map, METRICS
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
-from kialo_util import read_data
+from kialo_util import read_data, read_annotated_maps_ids
 from train_triplets_delib import parse_args, get_model_save_path
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
@@ -36,6 +37,7 @@ def add_more_args(parser):
     parser.add_argument('--debug_map_index', type=str, default=None)
     parser.add_argument('--no_data_split', type=str, default=None)
     parser.add_argument('--training_domain_index', type=int, default=-1)
+    parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
 
@@ -90,15 +92,7 @@ def main():
         logging.info(f"{len(argument_maps)=} maps in domain args['training_domain_index']={args['training_domain']}")
         wandb.config.update(args | {'data': 'kialoV2'})
 
-    # split data
-    argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=0.2, random_state=seed) \
-        if not args['no_data_split'] else (argument_maps, argument_maps)
-    if args['use_dev']:
-        argument_maps_train, argument_maps_dev = train_test_split(argument_maps_train, test_size=0.2, random_state=seed)
-    else:
-        argument_maps_dev = []
-    logging.info(f'train/dev/test using '
-                 f'{len(argument_maps_train)=} {len(argument_maps_dev)=} {len(argument_maps_test)=}')
+    argument_maps_dev, argument_maps_test, argument_maps_train = split_data(argument_maps, args, seed)
 
     if args['do_train']:
 
@@ -151,6 +145,34 @@ def main():
         avg_results = get_avg(all_results)
         (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
         wandb.log({'test': {'avg': avg_results}})
+
+
+def split_data(argument_maps: list[KialoMap], args: dict, seed: int):
+    test_size = 0.2
+    annotated_maps = []
+    if args['annotated_samples_in_test']:
+        annotated_maps_ids = read_annotated_maps_ids(args['local'])
+        not_annotated_maps, annotated_maps = [], []
+        for argument_map in argument_maps:
+            (not_annotated_maps, annotated_maps)[argument_map.id in annotated_maps_ids].append(argument_map)
+
+        more_test_maps_num = round(test_size * len(argument_maps) - len(annotated_maps))
+        logging.info(f'keep annotated samples in test: {len(annotated_maps)=} + {more_test_maps_num} for {test_size=}')
+        # change test_size from percentage to absolute number of maps to include beside the annotated samples
+        test_size = more_test_maps_num
+        argument_maps = not_annotated_maps
+
+    argument_maps_train, argument_maps_test = train_test_split(argument_maps, test_size=test_size, random_state=seed) \
+        if not args['no_data_split'] else (argument_maps, argument_maps)
+    argument_maps_test = annotated_maps + argument_maps_test
+
+    if args['use_dev']:
+        argument_maps_train, argument_maps_dev = train_test_split(argument_maps_train, test_size=0.2, random_state=seed)
+    else:
+        argument_maps_dev = []
+    logging.info(f'train/dev/test using '
+                 f'{len(argument_maps_train)=} {len(argument_maps_dev)=} {len(argument_maps_test)=}')
+    return argument_maps_dev, argument_maps_test, argument_maps_train
 
 
 def prepare_samples(argument_maps, split, args):
