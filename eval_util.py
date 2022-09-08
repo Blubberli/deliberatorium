@@ -34,14 +34,12 @@ def eval_one(eval_args: dict):
     if len(evaluation.child_nodes) == 0:
         logging.warning('no child nodes found')
         return None, None
-    mrr = evaluation.mean_reciprocal_rank(evaluation.ranks)
-    p5 = evaluation.precision_at_rank(evaluation.ranks, 5)
-    p1 = evaluation.precision_at_rank(evaluation.ranks, 1)
-    dist = evaluation.average_taxonomic_distance(0.5)
+    metrics = Evaluation.calculate_metrics(evaluation.ranks)
+    metrics['dist'] = evaluation.average_taxonomic_distance(0.5)
     # print(eval.ranks)
-    print("child nodes: %d candidates :%d MRR: %.2f p@5: %.2f p@1: %.2f dist: %.2f" % (
-        len(evaluation.child_nodes), len(evaluation.candidate_nodes), mrr, p5, p1, dist))
-    return dict(zip(METRICS, [mrr, p5, p1, dist])), \
+    print(f"child nodes: {len(evaluation.child_nodes)} candidates :{len(evaluation.candidate_nodes)}. " +
+          format_metrics(metrics))
+    return metrics, \
            [(c.id, r, p.id, t) for c, r, p, t in zip(evaluation.child_nodes, evaluation.ranks, evaluation.predictions,
                                                      evaluation.taxonomic_distances)]
 
@@ -49,3 +47,7 @@ def eval_one(eval_args: dict):
 def create_evaluation(eval_args: dict):
     evaluation_class = RerankEvaluation if 'cross_encoder' in eval_args else Evaluation
     return evaluation_class(**eval_args)
+
+
+def format_metrics(metrics):
+    return ' , '.join([f"{k}: {v:.2f}" for k, v in metrics.items()])

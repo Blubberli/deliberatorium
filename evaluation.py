@@ -149,6 +149,12 @@ class Evaluation:
         return target2id, id2target, np.array(matrix)
 
     @staticmethod
+    def calculate_metrics(ranks):
+        return {'mrr': Evaluation.mean_reciprocal_rank(ranks),
+                'p5': Evaluation.precision_at_rank(ranks, 5),
+                'p1': Evaluation.precision_at_rank(ranks, 1)}
+
+    @staticmethod
     def precision_at_rank(ranks, k):
         """
         Computes the number of times a rank is equal or lower to a given rank.

@@ -19,7 +19,7 @@ from tqdm import tqdm
 from transformers import set_seed
 
 from argumentMap import KialoMap
-from eval_util import METRICS, evaluate_map
+from eval_util import METRICS, evaluate_map, format_metrics
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
@@ -288,8 +288,10 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
                 rank = i
         sample['predictions'] = predictions
         sample['rank'] = rank
-
+    metrics = Evaluation.calculate_metrics([x['rank'] for x in samples.values()])
+    logging.info(format_metrics(metrics))
     (results_path / 'annotated_samples_predictions.json').write_text(json.dumps(samples))
+    (results_path / 'annotated_samples_metrics.json').write_text(json.dumps(samples))
 
 
 def get_avg(all_results):
