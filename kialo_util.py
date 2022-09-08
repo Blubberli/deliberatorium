@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -36,10 +37,27 @@ def read_data(args):
 
 
 def read_annotated_maps_ids(local: bool):
-    data_path = get_base_data_path(local) / 'annotation/annotation200instances'
+    data_path = get_annotation_data_path(local)
     annotated_maps_df = pd.read_csv(data_path / 'all_maps.csv', sep='\t')
     ids = annotated_maps_df['mapID'].to_list()
     return ids
+
+
+def read_annotated_samples(local: bool, args: dict = None):
+    data_path = get_annotation_data_path(local)
+    data = json.loads((data_path / 'target_and_candidate_info.json').read_text())
+    # clean up instances where the child node is in candidates
+    for node_id, sample in data.items():
+        if node_id in sample['candidates']:
+            print(f'removing {node_id} from its own candidates')
+            del sample['candidates'][node_id]
+    if args and args['debug_maps_size']:
+        data = {k: v for k, v in list(data.items())[:args['debug_maps_size']]}
+    return data
+
+
+def get_annotation_data_path(local: bool):
+    return get_base_data_path(local) / 'annotation/annotation200instances'
 
 
 def get_base_data_path(local: bool):

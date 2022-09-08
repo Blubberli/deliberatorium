@@ -13,6 +13,7 @@ import wandb
 from sentence_transformers import LoggingHandler, SentenceTransformer, InputExample, CrossEncoder
 from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
+from sentence_transformers.util import semantic_search
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from transformers import set_seed
@@ -22,7 +23,7 @@ from eval_util import METRICS, evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
-from kialo_util import read_data, read_annotated_maps_ids
+from kialo_util import read_data, read_annotated_maps_ids, read_annotated_samples, remove_url_and_hashtags
 from train_triplets_delib import parse_args, get_model_save_path
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
@@ -40,6 +41,7 @@ def add_more_args(parser):
     parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
+    parser.add_argument('--do_eval_annotated_samples', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--rerank', type=lambda x: (str(x).lower() == 'true'), default=False)
 
 
@@ -69,31 +71,32 @@ def main():
                settings=wandb.Settings(start_method="fork"))
     wandb.config.update(args | {'data': 'kialoV2'})
 
-    argument_maps = read_data(args)
-
-    # kialo domains
+    data_splits = None
     main_domains = []
-    if args['training_domain_index'] >= 0:
-        maps2uniquetopic, (_, _, main2subtopic) = get_maps2uniquetopic('data/kialoID2MainTopic.csv',
-                                                                       'data/kialo_domains.tsv')
-        main_domains = list(main2subtopic.keys())
+    if args['do_train'] or args['do_eval']:
+        argument_maps = read_data(args)
 
-        # domain_argument_maps = {domain: [KialoMap(str(data_path / (map_name + '.txt')), map_name)
-        #                                  for map_name, map_domain in maps2uniquetopic.items() if map_domain == domain]
-        #                         for domain in main2subtopic}
-        domain_argument_maps = {domain: [] for domain in main2subtopic}
-        for argument_map in argument_maps:
-            if argument_map.id in maps2uniquetopic:
-                domain_argument_maps[maps2uniquetopic[argument_map.id]].append(argument_map)
-            else:
-                logging.warning(f'{argument_map.label} {argument_map.name} skipped!')
-        argument_maps = domain_argument_maps[main_domains[args['training_domain_index']]]
-        args['training_domain'] = main_domains[args['training_domain_index']]
-        logging.info(f"{args['training_domain']=}")
-        logging.info(f"{len(argument_maps)=} maps in domain args['training_domain_index']={args['training_domain']}")
-        wandb.config.update(args | {'data': 'kialoV2'})
+        if args['training_domain_index'] >= 0:
+            maps2uniquetopic, (_, _, main2subtopic) = get_maps2uniquetopic('data/kialoID2MainTopic.csv',
+                                                                           'data/kialo_domains.tsv')
+            main_domains = list(main2subtopic.keys())
 
-    data_splits = split_data(argument_maps, args, model_save_path, seed)
+            # domain_argument_maps = {domain: [KialoMap(str(data_path / (map_name + '.txt')), map_name)
+            #                                  for map_name, map_domain in maps2uniquetopic.items() if map_domain == domain]
+            #                         for domain in main2subtopic}
+            domain_argument_maps = {domain: [] for domain in main2subtopic}
+            for argument_map in argument_maps:
+                if argument_map.id in maps2uniquetopic:
+                    domain_argument_maps[maps2uniquetopic[argument_map.id]].append(argument_map)
+                else:
+                    logging.warning(f'{argument_map.label} {argument_map.name} skipped!')
+            argument_maps = domain_argument_maps[main_domains[args['training_domain_index']]]
+            args['training_domain'] = main_domains[args['training_domain_index']]
+            logging.info(f"{args['training_domain']=}")
+            logging.info(f"{len(argument_maps)=} maps in domain args['training_domain_index']={args['training_domain']}")
+            wandb.config.update(args | {'data': 'kialoV2'})
+
+        data_splits = split_data(argument_maps, args, model_save_path, seed)
 
     if args['do_train']:
 
@@ -131,23 +134,34 @@ def main():
                   output_path=model_save_path,
                   use_amp=False  # Set to True, if your GPU supports FP16 operations
                   )
+
     # eval
-    all_results = []
-    cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2') if args['rerank'] else None
-    if args['do_eval']:
-        all_results.extend(
-            eval(model_save_path, args, data_splits['test'],
-                 domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all',
-                 max_candidates=args['max_candidates'],
-                 cross_encoder=cross_encoder))
-        if args['training_domain_index'] >= 0:
-            for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
-                all_results.extend(eval(model_save_path, args, domain_argument_maps[domain], domain=domain,
-                                        max_candidates=args['max_candidates'],
-                                        cross_encoder=cross_encoder))
-        avg_results = get_avg(all_results)
-        (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
-        wandb.log({'test': {'avg': avg_results}})
+    if args['do_eval'] or args['do_eval_annotated_samples']:
+        model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
+                                    model_save_path)
+        cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2') if args['rerank'] else None
+        if args['do_eval']:
+            map_encoder = MapEncoder(max_seq_len=args['max_seq_length'],
+                                     sbert_model_identifier=None,
+                                     model=model,
+                                     normalize_embeddings=True)
+            all_results = []
+            all_results.extend(
+                eval(model_save_path, data_splits['test'],
+                     domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all',
+                     max_candidates=args['max_candidates'],
+                     map_encoder=map_encoder, cross_encoder=cross_encoder))
+            if args['training_domain_index'] >= 0:
+                for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
+                    all_results.extend(eval(model_save_path, domain_argument_maps[domain], domain=domain,
+                                            max_candidates=args['max_candidates'],
+                                            map_encoder=map_encoder, cross_encoder=cross_encoder))
+            avg_results = get_avg(all_results)
+            (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
+            wandb.log({'test': {'avg': avg_results}})
+
+        if args['do_eval_annotated_samples']:
+            eval_samples(model_save_path, args, model, cross_encoder)
 
 
 def split_data(argument_maps: list[KialoMap], args: dict, output_dir: str, seed: int):
@@ -213,22 +227,16 @@ def prepare_samples(argument_maps, split, args):
     return maps_samples
 
 
-def eval(output_dir, args, argument_maps, domain, max_candidates, cross_encoder: CrossEncoder):
-    model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
-                                output_dir)
+def eval(output_dir, argument_maps, domain, max_candidates, map_encoder: MapEncoder, cross_encoder: CrossEncoder):
     results_path = Path(output_dir + '-results') / domain
     results_path.mkdir(exist_ok=True, parents=True)
-    encoder_mulitlingual = MapEncoder(max_seq_len=args['max_seq_length'],
-                                      sbert_model_identifier=None,
-                                      model=model,
-                                      normalize_embeddings=True)
     all_results = []
     maps_all_results = {}
     nodes_all_results = {}
     try:
         for j, eval_argument_map in enumerate(tqdm(argument_maps, f'eval maps in domain {domain}')):
             try:
-                results, nodes_all_results[eval_argument_map.label] = evaluate_map(encoder_mulitlingual,
+                results, nodes_all_results[eval_argument_map.label] = evaluate_map(map_encoder,
                                                                                    eval_argument_map, {1, -1},
                                                                                    max_candidates=max_candidates,
                                                                                    cross_encoder=cross_encoder)
@@ -251,6 +259,37 @@ def eval(output_dir, args, argument_maps, domain, max_candidates, cross_encoder:
     (results_path / f'-avg.json').write_text(json.dumps(avg_results))
     wandb.log({'test': {domain: {'avg': avg_results}}})
     return all_results
+
+
+def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: CrossEncoder):
+    results_path = Path(output_dir + '-results')
+    results_path.mkdir(exist_ok=True, parents=True)
+
+    samples = read_annotated_samples(args['local'], args)
+    for node_id, sample in tqdm(samples.items(), desc='encode and evaluate annotated samples'):
+        sample['text'] = remove_url_and_hashtags(sample['text'])
+        candidates = []
+        for candidate_id, candidate in sample['candidates'].items():
+            candidates.append({'text': remove_url_and_hashtags(candidate['text']), 'id': candidate_id})
+
+        node_embedding = encoder.encode(sample['text'], convert_to_tensor=True,
+                                        show_progress_bar=False)
+        candidates_embedding = encoder.encode([x['text'] for x in candidates],
+                                              convert_to_tensor=True,
+                                              show_progress_bar=False)
+        hits = semantic_search(node_embedding, candidates_embedding, top_k=len(sample['candidates']))[0]
+        predictions = []
+        rank = -1
+        for i, hit in enumerate(hits, start=1):
+            candidate = candidates[hit['corpus_id']]
+            candidate['score'] = hit['score']
+            predictions.append(candidate)
+            if candidate['id'] == sample['parent ID']:
+                rank = i
+        sample['predictions'] = predictions
+        sample['rank'] = rank
+
+    (results_path / 'annotated_samples_predictions.json').write_text(json.dumps(samples))
 
 
 def get_avg(all_results):
