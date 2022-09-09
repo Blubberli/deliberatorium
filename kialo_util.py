@@ -1,6 +1,5 @@
 import json
 import os
-import re
 
 import pandas as pd
 
@@ -64,13 +63,3 @@ def get_base_data_path(local: bool):
     return (Path.home() / "data/e-delib/kialo" if local else
             Path("/mount/projekte/e-delib/data/kialo"))
 
-
-def remove_url_and_hashtags(text):
-    pattern = r'(?i)\b((?:[a-z][\w-]+:(?:/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:\'".,<>?«»“”‘’]))'
-    match = re.findall(pattern, text)
-    for m in match:
-        url = m[0]
-        text = text.replace(url, '')
-    text = text.replace("()", "")
-    text = text.replace("#", "")
-    return text

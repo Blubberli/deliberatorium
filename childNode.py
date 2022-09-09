@@ -1,6 +1,8 @@
 from event import Event
 from abc import ABC, abstractmethod
 
+from util import remove_url_and_hashtags
+
 
 class ChildNode(ABC):
     """
@@ -160,6 +162,7 @@ class KialoChildNode(ChildNode):
         depth: The tree depth of this node
         :param node_dict: the dictionary representation of the node
         """
+        node_dict["name"] = remove_url_and_hashtags(node_dict["name"])
         super(KialoChildNode, self).__init__(node_dict)
         self.created = node_dict["created"]
         self.impact = node_dict["impact"]

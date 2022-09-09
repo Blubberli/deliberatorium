@@ -21,7 +21,7 @@ from sklearn.metrics import f1_score, classification_report
 import seaborn as sns
 import glob
 from evaluation import Evaluation as eval
-from kialo_util import remove_url_and_hashtags
+from util import remove_url_and_hashtags
 
 
 # create a mapping from Argument map to main topic

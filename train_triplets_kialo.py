@@ -23,7 +23,8 @@ from eval_util import METRICS, evaluate_map, format_metrics
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
-from kialo_util import read_data, read_annotated_maps_ids, read_annotated_samples, remove_url_and_hashtags
+from kialo_util import read_data, read_annotated_maps_ids, read_annotated_samples
+from util import remove_url_and_hashtags
 from train_triplets_delib import parse_args, get_model_save_path
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
