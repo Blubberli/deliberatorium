@@ -1,6 +1,8 @@
 import pandas as pd
 import itertools
 import json
+from collections import Counter
+
 
 def convert_google_answers(df, info, counter, targets, seemab1=True):
     # return the dataframe with each candidate, target, candidate ID and target ID, annotation from each annotator and the confidence rating for each instance
@@ -118,7 +120,7 @@ def add_candidate_and_target_info(annotations, candidates, targets):
         topic = target_info.topic.values[0]
         candidate_id = annotations.candidateID.values[i]
         if candidate_id == "CONF":
-            jan_conf.append(10 * [annotations["jan_conf"].values[i]])
+            jan_conf.append(10 * [annotations["jan_conv"].values[i]])
             vic_conf.append(10 * [annotations.vic_conf.values[i]])
             seemab_conf.append(10 * [annotations.seemab_conf.values[i]])
         else:
@@ -171,12 +173,84 @@ def candidate_with_target_file():
             candidate_id = float(candidate_id)
             candidate_info = candidates[candidates["id"] == candidate_id]
             if target_id not in final_dic:
-                final_dic[target_id] = {"candidates": {candidate_id:{"text": candidate_info["cleaned_comments"].values[0]}
-                                                       }, "text": target_info["target node clean"].values[0],
-                                        "parent ID": str(parent_id),
-                                        "nodeType": target_type}
+                final_dic[target_id] = {
+                    "candidates": {candidate_id: {"text": candidate_info["cleaned_comments"].values[0]}
+                                   }, "text": target_info["target node clean"].values[0],
+                    "parent ID": str(parent_id),
+                    "nodeType": target_type}
             else:
-                final_dic[target_id]["candidates"][candidate_id] = {"text": candidate_info["cleaned_comments"].values[0]}
+                final_dic[target_id]["candidates"][candidate_id] = {
+                    "text": candidate_info["cleaned_comments"].values[0]}
     print(final_dic)
     json.dump(final_dic,
-              open("/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/target_and_candidate_info.json", "w"))
+              open(
+                  "/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/target_and_candidate_info.json",
+                  "w"))
+
+
+def get_rank_annotator(label):
+    if label == "BEST PARENT":
+        return 1
+    if label == "SUITABLE PARENT":
+        return 2
+    else:
+        return 6
+
+
+def create_annotation_json():
+    input_json = json.load(
+        open("/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/target_and_candidate_info.json"))
+    annotations = pd.read_csv(
+        "/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/annotations1-4_withInfo.csv",
+        sep="\t")
+    annotations["candidateID"] = [str(el) for el in annotations.candidateID.values]
+    print(annotations.columns)
+    # print(annotations.candidateID.values)
+    for instance, info in input_json.items():
+        parentID = info["parent ID"]
+        candidates = info["candidates"]
+        predictions = []
+        rank = False
+        for candID, candInfo in candidates.items():
+            labels_candidate = annotations[annotations["candidateID"] == candID]
+            # print(len(labels_candidate))
+            annotation_jan = labels_candidate.jan.values[0]
+            annotation_vic = labels_candidate.victoria.values[0]
+            annotation_seemab = labels_candidate.seemab.values[0]
+            majority = Counter([annotation_jan, annotation_vic, annotation_seemab]).most_common(1)
+            majority = majority[0][0]
+            print(majority)
+            cand = {"text": candInfo["text"], "id": candID, "labelJan": annotation_jan, "labelVictoria": annotation_vic,
+                    "labelSeemab": annotation_seemab, "labelMajority": majority}
+            predictions.append(cand)
+            # compute rank
+            if candID == parentID:
+                rank = True
+                rank_jan = get_rank_annotator(annotation_jan)
+                rank_vic = get_rank_annotator(annotation_vic)
+                rank_seemab = get_rank_annotator(annotation_seemab)
+                rank_majority = get_rank_annotator(majority)
+        if rank:
+            info["predictions"] = predictions
+            info["rank_victoria"] = rank_vic
+            info["rank_jan"] = rank_jan
+            info["rank_seemab"] = rank_seemab
+            info["rank_majority"] = rank_majority
+    json.dump(input_json,
+              open("/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/annotation_results.json",
+                   "w"))
+    # print(instance, parentID)
+
+
+if __name__ == '__main__':
+    # create_annotation_json()
+    # annotations = pd.read_csv(
+    #    "/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/annotations1-4.tsv", sep="\t")
+    # candidates = pd.read_csv(
+    #    "/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/all_candidates.csv", sep="\t")
+    # targets = pd.read_csv("/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/all_targets.csv",
+    #                      sep="\t")
+    # df = add_candidate_and_target_info(annotations, candidates, targets)
+    # df.to_csv("/Users/falkne/PycharmProjects/deliberatorium/data/annotation200instances/annotations1-4_withInfo.csv",
+    #          sep="\t", index=False)
+    create_annotation_json()
