@@ -39,6 +39,7 @@ def add_more_args(parser):
     parser.add_argument('--debug_map_index', type=str, default=None)
     parser.add_argument('--no_data_split', type=str, default=None)
     parser.add_argument('--training_domain_index', type=int, default=-1)
+    parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
@@ -273,9 +274,9 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
         for candidate_id, candidate in sample['candidates'].items():
             candidates.append({'text': remove_url_and_hashtags(candidate['text']), 'id': candidate_id})
 
-        node_embedding = encoder.encode(sample['text'], convert_to_tensor=True,
+        node_embedding = encoder.encode(format(sample['text'], 'child', args), convert_to_tensor=True,
                                         show_progress_bar=False)
-        candidates_embedding = encoder.encode([x['text'] for x in candidates],
+        candidates_embedding = encoder.encode([format(x['text'], 'parent', args) for x in candidates],
                                               convert_to_tensor=True,
                                               show_progress_bar=False)
         hits = semantic_search(node_embedding, candidates_embedding, top_k=len(sample['candidates']))[0]
@@ -293,6 +294,13 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
     logging.info(format_metrics(metrics))
     (results_path / 'annotated_samples_predictions.json').write_text(json.dumps(samples))
     (results_path / 'annotated_samples_metrics.json').write_text(json.dumps(metrics))
+
+
+def format(text: str, type: str, args: dict):
+    if not args['use_templates']:
+        return text
+    return {'child': 'This sentence: "{}" is child',
+            'parent': 'This sentence: "{}" is parent'}[type].format(text)
 
 
 def get_avg(all_results):
