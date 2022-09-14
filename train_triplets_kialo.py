@@ -18,12 +18,15 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from transformers import set_seed
 
+import templates
 from argumentMap import KialoMap
+from childNode import ChildNode
 from eval_util import METRICS, evaluate_map, format_metrics
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
 from kialo_util import read_data, read_annotated_maps_ids, read_annotated_samples
+from templates import format
 from util import remove_url_and_hashtags
 from train_triplets_delib import parse_args, get_model_save_path
 
@@ -146,7 +149,8 @@ def main():
             map_encoder = MapEncoder(max_seq_len=args['max_seq_length'],
                                      sbert_model_identifier=None,
                                      model=model,
-                                     normalize_embeddings=True)
+                                     normalize_embeddings=True,
+                                     use_templates=args['use_templates'])
             all_results = []
             all_results.extend(
                 eval(model_save_path, data_splits['test'],
@@ -213,20 +217,26 @@ def prepare_samples(argument_maps, split, args):
                 non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
                 if len(non_parents) > args['hard_negatives_size'] > 0:
                     non_parents = random.sample(non_parents, args['hard_negatives_size'])
+
                 if split == 'dev':
-                    maps_samples[argument_map.label].extend([InputExample(
-                        texts=[x.name for x in [child, non_parent]], label=0) for non_parent in non_parents])
-                    maps_samples[argument_map.label].append(InputExample(
-                        texts=[x.name for x in [child, parent]], label=1))
+                    maps_samples[argument_map.label].extend([create_training_example(
+                        [child, non_parent], label=0) for non_parent in non_parents])
+                    maps_samples[argument_map.label].append(create_training_example([child, parent], label=1))
                 else:
                     # NOTE original code also adds opposite
-                    maps_samples[argument_map.label].extend([InputExample(
-                        texts=[x.name for x in [child, parent, non_parent]]) for non_parent in non_parents])
+                    maps_samples[argument_map.label].extend([create_training_example(
+                        [child, parent, non_parent], args['use_templates']) for non_parent in non_parents])
             else:
-                maps_samples[argument_map.label].append(InputExample(texts=[x.name for x in [child, parent]]))
+                maps_samples[argument_map.label].append(create_training_example(
+                    [child, parent], args['use_templates']))
     if args['debug_size']:
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
     return maps_samples
+
+
+def create_training_example(nodes: list[ChildNode], use_templates=False, label=0):
+    types = ['child'] + ['parent'] * (len(nodes) - 1)
+    return InputExample(texts=[templates.format(x.name, t, use_templates) for x, t in zip(nodes, types)], label=label)
 
 
 def eval(output_dir, argument_maps, domain, max_candidates, map_encoder: MapEncoder, cross_encoder: CrossEncoder):
@@ -274,9 +284,9 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
         for candidate_id, candidate in sample['candidates'].items():
             candidates.append({'text': remove_url_and_hashtags(candidate['text']), 'id': candidate_id})
 
-        node_embedding = encoder.encode(format(sample['text'], 'child', args), convert_to_tensor=True,
+        node_embedding = encoder.encode(format(sample['text'], 'child', args['use_templates']), convert_to_tensor=True,
                                         show_progress_bar=False)
-        candidates_embedding = encoder.encode([format(x['text'], 'parent', args) for x in candidates],
+        candidates_embedding = encoder.encode([format(x['text'], 'parent', args['use_templates']) for x in candidates],
                                               convert_to_tensor=True,
                                               show_progress_bar=False)
         hits = semantic_search(node_embedding, candidates_embedding, top_k=len(sample['candidates']))[0]
@@ -294,13 +304,6 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
     logging.info(format_metrics(metrics))
     (results_path / 'annotated_samples_predictions.json').write_text(json.dumps(samples))
     (results_path / 'annotated_samples_metrics.json').write_text(json.dumps(metrics))
-
-
-def format(text: str, type: str, args: dict):
-    if not args['use_templates']:
-        return text
-    return {'child': 'This sentence: "{}" is child',
-            'parent': 'This sentence: "{}" is parent'}[type].format(text)
 
 
 def get_avg(all_results):

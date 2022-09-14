@@ -18,7 +18,6 @@ class Evaluation:
         self.argument_map = argument_map
         # gather all nodes in the map and construct a node2index and an embedding matrix
         self.all_nodes = self.argument_map.all_children
-        self.node2id, self.id2node, self.embedding_matrix = self.get_embedding_matrix()
         # extract the nodes to be tested
         self.child_nodes = self.get_child_nodes(only_leafs, child_node_type, candidate_node_types)
         # extract their corresponding parents
@@ -31,6 +30,7 @@ class Evaluation:
         assert len(self.child_nodes) == len(
             self.parent_nodes), "the number of children and their parents is not the same"
         if not no_ranks:
+            self.node2id, self.id2node, self.embedding_matrix, self.parent_embedding_matrix = self.get_embedding_matrix()
             self.ranks, self.predictions = self.compute_ranks()
 
     def compute_ranks(self):
@@ -46,7 +46,10 @@ class Evaluation:
         ranks = []
         predictions = []
         # compute all possible pairwise similarities
-        self.node2node_similarity = np.dot(self.embedding_matrix, np.transpose(self.embedding_matrix))
+        self.node2node_similarity = np.dot(self.embedding_matrix,
+                                           np.transpose(self.parent_embedding_matrix
+                                                        if self.parent_embedding_matrix is not None else
+                                                        self.embedding_matrix))
         # extract child IDs
         self.child_idxs = [self.node2id[node] for node in self.child_nodes]
         self.parent_idx = [self.node2id[node] for node in self.parent_nodes]
@@ -146,7 +149,9 @@ class Evaluation:
         target2id = dict(zip(self.all_nodes, range(len(self.all_nodes))))
         id2target = dict(zip(range(len(self.all_nodes)), self.all_nodes))
         matrix = [self.all_nodes[i].embedding for i in range(len(self.all_nodes))]
-        return target2id, id2target, np.array(matrix)
+        return (target2id, id2target, np.array(matrix),
+                (np.array([self.all_nodes[i].extra_embeddings['parent'] for i in range(len(self.all_nodes))])
+                 if self.all_nodes[0].extra_embeddings is not None else None))
 
     @staticmethod
     def calculate_metrics(ranks):

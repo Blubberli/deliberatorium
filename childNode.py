@@ -31,6 +31,7 @@ class ChildNode(ABC):
         self.is_leaf = True if len(self.direct_children) == 0 else False
         self.parent = None
         self.embedding = None
+        self.extra_embeddings = {}
         self.siblings = []
         # set this node as parent for each of its' children
         for child in self.direct_children:
