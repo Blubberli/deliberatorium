@@ -72,7 +72,9 @@ class MapEncoder:
                                             normalize_embeddings=self.normalize_embeddings)
         for i in range(len(nodes)):
             nodes[i].add_embedding(embeddings[i])
-            nodes[i].extra_embeddings['parent'] = extra_embeddings['parent'][i]
+        if self.use_templates:
+            for i in range(len(nodes)):
+                nodes[i].extra_embeddings['parent'] = extra_embeddings['parent'][i]
         return {"embeddings": embeddings, "sentences": sentences, "ID": unique_ids}
 
     def add_stored_embeddings(self, argument_map, path_to_pckl):

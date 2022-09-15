@@ -151,7 +151,7 @@ class Evaluation:
         matrix = [self.all_nodes[i].embedding for i in range(len(self.all_nodes))]
         return (target2id, id2target, np.array(matrix),
                 (np.array([self.all_nodes[i].extra_embeddings['parent'] for i in range(len(self.all_nodes))])
-                 if self.all_nodes[0].extra_embeddings is not None else None))
+                 if self.all_nodes[0].extra_embeddings else None))
 
     @staticmethod
     def calculate_metrics(ranks):
