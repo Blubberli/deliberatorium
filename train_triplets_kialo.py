@@ -19,6 +19,7 @@ from tqdm import tqdm
 from transformers import set_seed
 
 import templates
+import util
 from argumentMap import KialoMap
 from childNode import ChildNode
 from eval_util import METRICS, evaluate_map, format_metrics
@@ -42,6 +43,8 @@ def add_more_args(parser):
     parser.add_argument('--debug_map_index', type=str, default=None)
     parser.add_argument('--no_data_split', type=str, default=None)
     parser.add_argument('--training_domain_index', type=int, default=-1)
+    parser.add_argument('--train_maps_size', type=int, default=0)
+    parser.add_argument('--train_per_map_size', type=int, default=0)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
@@ -104,6 +107,9 @@ def main():
         data_splits = split_data(argument_maps, args, model_save_path, seed)
 
     if args['do_train']:
+        if args['train_maps_size']:
+            logging.info(f"{args['train_maps_size']=}")
+            data_splits['train'] = util.sample(data_splits['train'], args['train_maps_size'])
 
         maps_samples = prepare_samples(data_splits['train'], 'train', args)
         maps_samples_dev = prepare_samples(data_splits['dev'], 'dev', args)
@@ -210,9 +216,12 @@ def split_data(argument_maps: list[KialoMap], args: dict, output_dir: str, seed:
 
 def prepare_samples(argument_maps, split, args):
     maps_samples = {x.label: [] for x in argument_maps}
+    get_samples_from_map = ((lambda x: util.sample(x, args['train_per_map_size']))
+                            if args['train_per_map_size'] else (lambda x: x))
     for i, argument_map in enumerate(tqdm(argument_maps, f'preparing samples {split}')):
         argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
-        for child, parent in zip(argument_map_util.child_nodes, argument_map_util.parent_nodes):
+        for child, parent in get_samples_from_map(list(
+                zip(argument_map_util.child_nodes, argument_map_util.parent_nodes))):
             if split == 'dev' or args['hard_negatives']:
                 non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
                 if len(non_parents) > args['hard_negatives_size'] > 0:

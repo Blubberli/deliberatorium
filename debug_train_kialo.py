@@ -4,11 +4,14 @@ import train_triplets_kialo
 
 sys.argv += ['--local', 'True']
 sys.argv += ['--debug_maps_size', '10']
+
 sys.argv += '--model_name_or_path sentence-transformers/paraphrase-albert-small-v2'.split(' ')
 sys.argv += '--hard_negatives False'.split(' ')
 sys.argv += '--lang english'.split(' ')
 sys.argv += '--use_templates True'.split(' ')
 # sys.argv += '--use_dev True'.split(' ')
+
+sys.argv += '--debug_maps_size 13 --train_maps_size 10 --train_per_map_size 10'.split(' ')
 
 # sys.argv += '--eval_model_name_or_path sentence-transformers/paraphrase-albert-small-v2'.split(' ')
 # sys.argv += '--eval_not_trained True --do_train False'.split(' ')
