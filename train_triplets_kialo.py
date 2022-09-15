@@ -298,17 +298,11 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
         candidates_embedding = encoder.encode([format(x['text'], 'parent', args['use_templates']) for x in candidates],
                                               convert_to_tensor=True,
                                               show_progress_bar=False)
-        hits = semantic_search(node_embedding, candidates_embedding, top_k=len(sample['candidates']))[0]
-        predictions = []
-        rank = -1
-        for i, hit in enumerate(hits, start=1):
-            candidate = candidates[hit['corpus_id']]
-            candidate['score'] = hit['score']
-            predictions.append(candidate)
-            if candidate['id'] == sample['parent ID']:
-                rank = i
-        sample['predictions'] = predictions
-        sample['rank'] = rank
+
+        ranks, predictions = Evaluation.eval_nodes(node_embedding, candidates_embedding, candidates,
+                                                   [node_id], [sample['parent ID']])
+        sample['rank'], sample['predictions'] = ranks[0], predictions[0]
+
     metrics = Evaluation.calculate_metrics([x['rank'] for x in samples.values()])
     logging.info(format_metrics(metrics))
     (results_path / 'annotated_samples_predictions.json').write_text(json.dumps(samples))

@@ -33,6 +33,7 @@ class ArgumentMap(ABC):
         for child in self.direct_children:
             all_children = self.get_all_children(node=child, child_list=all_children)
         self.all_children = all_children
+        self.all_children_dict = {x.id: x for x in all_children}
 
     @abstractmethod
     def load_data(self, data_path) -> dict:

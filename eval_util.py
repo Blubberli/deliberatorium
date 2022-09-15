@@ -45,9 +45,11 @@ def eval_one(eval_args: dict):
     # print(eval.ranks)
     print(f"child nodes: {len(evaluation.child_nodes)} candidates :{len(evaluation.candidate_nodes)}. " +
           format_metrics(metrics))
-    return metrics, \
-           [(c.id, r, p.id, t) for c, r, p, t in zip(evaluation.child_nodes, evaluation.ranks, evaluation.predictions,
-                                                     evaluation.taxonomic_distances)]
+    node_results = [{'id': c.id, 'parent_id': c.parent.id, 'rank': r, 'dist': t, 'predictions': p} for c, r, p, t in
+                    zip(evaluation.child_nodes, evaluation.ranks, evaluation.predictions, evaluation.taxonomic_distances
+                        )]
+    return metrics, node_results
+
 
 
 def create_evaluation(eval_args: dict):
