@@ -1,5 +1,7 @@
 import json
 import os
+import pickle
+import sys
 
 import pandas as pd
 
@@ -11,6 +13,16 @@ LANGS = ['english', 'french', 'german', 'italian', 'other']
 
 
 def read_data(args):
+    processed_maps_path = Path('temp/maps.pkl')
+    # fix for pickle
+    # RecursionError: maximum recursion depth exceeded while calling a Python object
+    recursion_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(10000)
+    if processed_maps_path.exists():
+        print(f'reading processed maps from {processed_maps_path}')
+        with (open(processed_maps_path, 'rb')) as f:
+            return pickle.load(f)
+
     data_path = get_base_data_path(args['local']) / 'kialoV2'
 
     assert args['lang'] in [*LANGS, None]
@@ -32,6 +44,12 @@ def read_data(args):
                      # some maps seem to be duplicates with (1) in name
                      if '(1)' not in _map.stem]
     print(f'remaining {len(maps)} maps after clean up')
+
+    processed_maps_path.parent.mkdir(exist_ok=True)
+    with open(processed_maps_path, 'wb') as f:
+        pickle.dump(argument_maps, f)
+    sys.setrecursionlimit(recursion_limit)
+
     return argument_maps
 
 
