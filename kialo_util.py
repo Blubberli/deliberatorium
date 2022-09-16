@@ -62,7 +62,7 @@ def read_annotated_maps_ids(local: bool):
 
 def read_annotated_samples(local: bool, args: dict = None):
     data_path = get_annotation_data_path(local)
-    data = json.loads((data_path / 'target_and_candidate_info.json').read_text())
+    data = json.loads((data_path / 'child_and_candidate_info.json').read_text())
     # clean up instances where the child node is in candidates
     for node_id, sample in data.items():
         if node_id in sample['candidates']:
