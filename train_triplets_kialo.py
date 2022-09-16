@@ -29,7 +29,7 @@ from kialo_domains_util import get_maps2uniquetopic
 from kialo_util import read_data, read_annotated_maps_ids, read_annotated_samples
 from templates import format
 from util import remove_url_and_hashtags
-from train_triplets_delib import parse_args, get_model_save_path
+from train_triplets_delib import parse_args, get_model_save_path, RESULTS_DIR
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
 
@@ -73,7 +73,7 @@ def main():
 
     if args['local']:
         os.environ['WANDB_MODE'] = 'disabled'
-    wandb.init(project='argument-maps', name=model_save_path,
+    wandb.init(project='argument-maps', name=model_save_path.removeprefix(RESULTS_DIR),
                # to fix "Error communicating with wandb process"
                # see https://docs.wandb.ai/guides/track/launch#init-start-error
                settings=wandb.Settings(start_method="fork"))

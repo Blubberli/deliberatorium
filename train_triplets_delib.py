@@ -18,6 +18,8 @@ from eval_util import evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
 
+RESULTS_DIR = 'results/'
+
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
 
 logging.basicConfig(format='%(asctime)s - %(message)s',
@@ -76,8 +78,8 @@ def parse_args(add_more_args=None):
 
 
 def get_model_save_path(model_name, args, map_label=None):
-    model_save_path_prefix = 'results/' + (f'{args["output_dir_prefix"]}/' if args['output_dir_prefix'] else '')\
-        + (f"domain{args['training_domain_index']}"
+    model_save_path_prefix = RESULTS_DIR + (f'{args["output_dir_prefix"]}/' if args['output_dir_prefix'] else '') \
+                             + (f"domain{args['training_domain_index']}"
            if 'training_domain_index' in args and args['training_domain_index'] >= 0 else '')
                              # + model_name.replace("/", "-")
     if not map_label:
