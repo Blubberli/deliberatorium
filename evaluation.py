@@ -79,6 +79,8 @@ class Evaluation:
     @staticmethod
     def eval_nodes(node_embedding: Tensor, candidates_embedding: Tensor, candidates: list[dict],
                    node_ids: list[str], parent_ids: list[str], top_k=0):
+        if top_k == 0:
+            top_k = len(candidates)
         hits_list = semantic_search(node_embedding, candidates_embedding,
                                     top_k=len(candidates))
         all_predictions, all_ranks = [], []
