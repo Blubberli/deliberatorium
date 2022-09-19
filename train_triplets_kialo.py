@@ -46,6 +46,7 @@ def add_more_args(parser):
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--template_id', type=str, default='standard')
     parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
@@ -78,6 +79,8 @@ def main():
                # see https://docs.wandb.ai/guides/track/launch#init-start-error
                settings=wandb.Settings(start_method="fork"))
     wandb.config.update(args | {'data': 'kialoV2'})
+
+    templates.args = args
 
     data_splits = None
     main_domains = []
