@@ -310,6 +310,7 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
     logging.info(format_metrics(metrics))
     (results_path / 'annotated_samples_predictions.json').write_text(json.dumps(samples))
     (results_path / 'annotated_samples_metrics.json').write_text(json.dumps(metrics))
+    wandb.log({'samples': metrics})
 
 
 def get_avg(all_results):
