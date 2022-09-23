@@ -9,6 +9,7 @@ sys.argv += '--model_name_or_path sentence-transformers/paraphrase-albert-small-
 sys.argv += '--hard_negatives False'.split(' ')
 sys.argv += '--lang english'.split(' ')
 sys.argv += '--use_templates True'.split(' ')
+# sys.argv += '--template_id pro/con'.split(' ')
 # sys.argv += '--use_dev True'.split(' ')
 
 sys.argv += '--debug_maps_size 13 --train_maps_size 10 --train_per_map_size 10'.split(' ')

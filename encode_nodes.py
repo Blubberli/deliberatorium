@@ -63,10 +63,10 @@ class MapEncoder:
         extra_embeddings = {}
         if self.use_templates:
             extra_embeddings['parent'] = self.sbertModel.encode(
-                [templates.format(x, 'parent', True) for x in sentences],
+                [templates.format_primary(x, 'parent', True) for x in sentences],
                 show_progress_bar=True,
                 normalize_embeddings=self.normalize_embeddings)
-            sentences = [templates.format(x, 'child', True) for x in sentences]
+            sentences = [templates.format_primary(x, 'child', True) for x in sentences]
 
         embeddings = self.sbertModel.encode(sentences, show_progress_bar=True,
                                             normalize_embeddings=self.normalize_embeddings)
