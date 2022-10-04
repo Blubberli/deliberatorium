@@ -111,7 +111,10 @@ def main():
     if args['do_train']:
         if args['train_maps_size']:
             logging.info(f"{args['train_maps_size']=}")
-            data_splits['train'] = util.sample(data_splits['train'], args['train_maps_size'])
+            data_splits['train'] = util.sample(
+                # filter to maps with #children strictly more than needed (root can't be used)
+                [x for x in data_splits['train'] if len(x.all_children) > args['train_per_map_size']],
+                args['train_maps_size'])
 
         maps_samples = prepare_samples(data_splits['train'], 'train', args, model_save_path)
         maps_samples_dev = prepare_samples(data_splits['dev'], 'dev', args, model_save_path)
