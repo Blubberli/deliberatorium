@@ -31,6 +31,6 @@ def format_primary(text: str, node_type: str, use_templates: bool):
 
 def format_all_possible(text: str, node_type: str, use_templates: bool):
     if not use_templates:
-        return text
+        return [text]
     return [TEMPLATES[args['template_id']][t].format(text) for t in
             TEMPLATES[args['template_id']]['possible_templates'][node_type]]

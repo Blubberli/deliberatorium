@@ -44,6 +44,7 @@ def add_more_args(parser):
     parser.add_argument('--no_data_split', type=str, default=None)
     parser.add_argument('--training_domain_index', type=int, default=-1)
     parser.add_argument('--train_method', type=str, default='mulneg')
+    parser.add_argument('--train_negative_class_size', type=int, default=8)
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
@@ -217,30 +218,18 @@ def split_data(argument_maps: list[KialoMap], args: dict, output_dir: str, seed:
 
 
 def prepare_samples(argument_maps, split_name, args, output_dir):
+    prepare_func = prepare_training_samples if split_name == 'train' else prepare_dev_samples
     maps_samples = {x.label: [] for x in argument_maps}
     get_samples_from_map = ((lambda x: util.sample(x, args['train_per_map_size']))
                             if args['train_per_map_size'] else (lambda x: x))
     for i, argument_map in enumerate(tqdm(argument_maps, f'preparing samples {split_name}')):
         argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
+        all_parents = set(x for x in argument_map_util.parent_nodes)
         for child, parent in get_samples_from_map(list(
                 zip(argument_map_util.child_nodes, argument_map_util.parent_nodes))):
-            if split_name == 'dev' or args['hard_negatives']:
-                non_parents = [x for x in argument_map_util.parent_nodes if x != parent]
-                if len(non_parents) > args['hard_negatives_size'] > 0:
-                    non_parents = random.sample(non_parents, args['hard_negatives_size'])
+            non_parents = [x for x in all_parents if x != parent]
+            maps_samples[argument_map.label].extend(prepare_func(child, parent, non_parents, args))
 
-                if split_name == 'dev':
-                    maps_samples[argument_map.label].extend([create_dev_example(
-                        [child, non_parent], label=0) for non_parent in non_parents])
-                    maps_samples[argument_map.label].append(create_dev_example([child, parent], label=1))
-                else:
-                    if args['use_templates']:
-                        raise NotImplementedError('hard negatives not supported with templates')
-                    maps_samples[argument_map.label].extend([create_dev_example(
-                        [child, parent, non_parent], args['use_templates']) for non_parent in non_parents])
-            else:
-                maps_samples[argument_map.label].extend(create_train_example(
-                    child, parent, args['use_templates']))
     if args['debug_size']:
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
 
@@ -248,41 +237,53 @@ def prepare_samples(argument_maps, split_name, args, output_dir):
     path.mkdir(exist_ok=True, parents=True)
     (path / f'{split_name}-samples.json').write_text(json.dumps({k: [vars(x) for x in v[:10]]
                                                                  for k, v in list(maps_samples.items())[:10]}))
-
     return maps_samples
 
 
-def create_train_example(child_node: ChildNode, parent_node: ChildNode, use_templates=False, label=0):
+def prepare_training_samples(child, parent, non_parents, args):
+    if args['train_method'] == 'mulneg':
+        if not args['hard_negatives']:
+            return create_all_possible_examples(child, parent, args['use_templates'])
+        else:
+            if args['use_templates']:
+                raise NotImplementedError('hard negatives not supported')
+            if len(non_parents) > args['hard_negatives_size'] > 0:
+                non_parents = random.sample(non_parents, args['hard_negatives_size'])
+                return [create_primary_example([child, parent, non_parent], use_templates=args['use_templates'])
+                        for non_parent in non_parents]
+    elif args['train_method'] == 'class':
+        return create_all_possible_examples(child, parent, label=1, use_templates=args['use_templates']) + \
+               list(itertools.chain.from_iterable(
+                   create_all_possible_examples(child, non_parent, label=0, use_templates=args['use_templates'])
+                   # add negatives (move later to dataloader?)
+                   for non_parent in sample(non_parents, args['train_negative_class_size'])))
+
+
+def prepare_dev_samples(child, parent, non_parents, args):
+    return [create_primary_example([child, non_parent], label=0, use_templates=args['use_templates']) for non_parent in non_parents] + \
+           [create_primary_example([child, parent], label=1, use_templates=args['use_templates'])]
+
+
+def create_all_possible_examples(child_node: ChildNode, parent_node: ChildNode, use_templates, label=0):
     node_types = {1: 'pro', -1: 'con'}
     templated_child, templated_parent = [templates.format_all_possible(x.name, t, use_templates) for x, t in
                                          zip([child_node, parent_node], [node_types[child_node.type], 'parent'])]
     return [InputExample(texts=[c, p], label=label) for c, p in itertools.product(templated_child, templated_parent)]
 
 
-def create_dev_example(nodes: list[ChildNode], use_templates=False, label=0):
+def create_primary_example(nodes: list[ChildNode], use_templates, label=0):
     types = ['child'] + ['parent'] * (len(nodes) - 1)
     return InputExample(texts=[templates.format_primary(x.name, t, use_templates) for x, t in zip(nodes, types)],
                         label=label)
 
 
 def prepare_training(maps_samples, model, args):
-    train_samples = []
+    train_samples = list(itertools.chain(*maps_samples.values()))
     if args['train_method'] == 'mulneg':
-        train_samples = list(itertools.chain(*maps_samples.values()))
         # Special data loader that avoid duplicates within a batch
         train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size'])
         train_loss = losses.MultipleNegativesRankingLoss(model)
     elif args['train_method'] == 'class':
-        for map_samples in maps_samples.values():
-            all_parents = set([x.texts[1] for x in map_samples])
-            for i, input_example in enumerate(map_samples):
-                input_example.label = 1
-                train_samples.append(input_example)
-                # add #negatives similar to train_batch_size to make comparable? (move later to dataloader)
-                train_samples.extend([InputExample(texts=[input_example.texts[0], parent], label=0)
-                                      for parent in sample([x for x in all_parents if x not in input_example.texts],
-                                                           args['train_batch_size'])])
-        # Special data loader that avoid duplicates within a batch
         train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
         train_loss = losses.SoftmaxLoss(model=model,
                                         sentence_embedding_dimension=model.get_sentence_embedding_dimension(),
