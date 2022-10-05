@@ -1,5 +1,6 @@
-import re
 import random
+import re
+from typing import Union, Sequence, AbstractSet
 
 
 def remove_url_and_hashtags(text):
@@ -8,5 +9,5 @@ def remove_url_and_hashtags(text):
     return text
 
 
-def sample(x: list, max_size: int):
+def sample(x: Union[Sequence, AbstractSet], max_size: int):
     return random.sample(x, min(max_size, len(x)))

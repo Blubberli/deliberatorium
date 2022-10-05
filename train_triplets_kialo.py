@@ -14,6 +14,7 @@ from sentence_transformers import LoggingHandler, SentenceTransformer, InputExam
 from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import set_seed
 
@@ -27,7 +28,7 @@ from evaluation import Evaluation
 from kialo_domains_util import get_maps2uniquetopic
 from kialo_util import read_data, read_annotated_maps_ids, read_annotated_samples
 from templates import format_primary
-from util import remove_url_and_hashtags
+from util import remove_url_and_hashtags, sample
 from train_triplets_delib import parse_args, get_model_save_path, RESULTS_DIR
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
@@ -42,6 +43,7 @@ def add_more_args(parser):
     parser.add_argument('--debug_map_index', type=str, default=None)
     parser.add_argument('--no_data_split', type=str, default=None)
     parser.add_argument('--training_domain_index', type=int, default=-1)
+    parser.add_argument('--train_method', type=str, default='mulneg')
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
@@ -63,7 +65,6 @@ def main():
     os.environ['PYTHONHASHSEED'] = str(seed)
 
     model_name = args['model_name_or_path']
-    train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
     max_seq_length = args['max_seq_length']
     num_epochs = args['num_train_epochs']
 
@@ -123,20 +124,16 @@ def main():
         pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
         model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
-        train_samples = list(itertools.chain(*maps_samples.values()))
+        train_dataloader, train_loss = prepare_training(maps_samples, model, args)
+
         dev_samples = list(itertools.chain(*maps_samples_dev.values()))
-
-        logging.info("Train samples: {}".format(len(train_samples)))
-
-        # Special data loader that avoid duplicates within a batch
-        train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=train_batch_size)
-        train_loss = losses.MultipleNegativesRankingLoss(model)
-
         dev_evaluator = (EmbeddingSimilarityEvaluator.from_input_examples(
-            dev_samples, batch_size=train_batch_size, name='dev')
+            dev_samples, batch_size=args['train_batch_size'], name='dev')
                          if args['use_dev'] else None)
 
-        print(f'{len(train_dataloader)=}')
+        assert len(train_dataloader)
+        logging.info(f'{len(train_dataloader)=}')
+        logging.getLogger().handlers[0].flush()
         # 10% of train data for warm-up
         warmup_steps = math.ceil(len(train_dataloader) * num_epochs * 0.1)
         logging.info("Warmup-steps: {}".format(warmup_steps))
@@ -266,6 +263,34 @@ def create_dev_example(nodes: list[ChildNode], use_templates=False, label=0):
     types = ['child'] + ['parent'] * (len(nodes) - 1)
     return InputExample(texts=[templates.format_primary(x.name, t, use_templates) for x, t in zip(nodes, types)],
                         label=label)
+
+
+def prepare_training(maps_samples, model, args):
+    train_samples = []
+    if args['train_method'] == 'mulneg':
+        train_samples = list(itertools.chain(*maps_samples.values()))
+        # Special data loader that avoid duplicates within a batch
+        train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size'])
+        train_loss = losses.MultipleNegativesRankingLoss(model)
+    elif args['train_method'] == 'class':
+        for map_samples in maps_samples.values():
+            all_parents = set([x.texts[1] for x in map_samples])
+            for i, input_example in enumerate(map_samples):
+                input_example.label = 1
+                train_samples.append(input_example)
+                # add #negatives similar to train_batch_size to make comparable? (move later to dataloader)
+                train_samples.extend([InputExample(texts=[input_example.texts[0], parent], label=0)
+                                      for parent in sample([x for x in all_parents if x not in input_example.texts],
+                                                           args['train_batch_size'])])
+        # Special data loader that avoid duplicates within a batch
+        train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
+        train_loss = losses.SoftmaxLoss(model=model,
+                                        sentence_embedding_dimension=model.get_sentence_embedding_dimension(),
+                                        num_labels=2)
+    else:
+        raise NotImplementedError(f"{args['train_method']}")
+    logging.info("Train samples: {}".format(len(train_samples)))
+    return train_dataloader, train_loss
 
 
 def eval(output_dir, argument_maps, domain, max_candidates, map_encoder: MapEncoder, cross_encoder: CrossEncoder):

@@ -12,7 +12,9 @@ sys.argv += '--use_templates True'.split(' ')
 # sys.argv += '--template_id pro/con'.split(' ')
 # sys.argv += '--use_dev True'.split(' ')
 
-sys.argv += '--debug_maps_size 13 --train_maps_size 10 --train_per_map_size 10'.split(' ')
+sys.argv += '--debug_maps_size 13 --train_maps_size 1 --train_per_map_size 8 --train_batch_size 8'.split(' ')
+
+sys.argv += '--train_method class'.split(' ')
 
 # sys.argv += '--eval_model_name_or_path sentence-transformers/paraphrase-albert-small-v2'.split(' ')
 # sys.argv += '--eval_not_trained True --do_train False'.split(' ')
