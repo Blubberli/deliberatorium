@@ -12,6 +12,8 @@ sys.argv += '--use_templates True'.split(' ')
 # sys.argv += '--template_id pro/con'.split(' ')
 # sys.argv += '--use_dev True'.split(' ')
 
+
+sys.argv += '--data_samples_seed 13'.split(' ')
 sys.argv += '--debug_maps_size 13 --train_maps_size 1 --train_per_map_size 8 --train_batch_size 8'.split(' ')
 
 sys.argv += '--train_method class'.split(' ')

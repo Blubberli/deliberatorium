@@ -1,4 +1,5 @@
-args: dict[str]
+import util
+
 TEMPLATES = {
     'beginning': {'child': 'child: "{}"',
                   'parent': 'parent: "{}"'},
@@ -26,11 +27,11 @@ for k, v in TEMPLATES.items():
 def format_primary(text: str, node_type: str, use_templates: bool):
     if not use_templates:
         return text
-    return TEMPLATES[args['template_id']][node_type].format(text)
+    return TEMPLATES[util.args['template_id']][node_type].format(text)
 
 
 def format_all_possible(text: str, node_type: str, use_templates: bool):
     if not use_templates:
         return [text]
-    return [TEMPLATES[args['template_id']][t].format(text) for t in
-            TEMPLATES[args['template_id']]['possible_templates'][node_type]]
+    return [TEMPLATES[util.args['template_id']][t].format(text) for t in
+            TEMPLATES[util.args['template_id']]['possible_templates'][node_type]]

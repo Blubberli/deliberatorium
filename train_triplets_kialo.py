@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import random
+import re
 import signal
 import statistics
 from pathlib import Path
@@ -47,6 +48,7 @@ def add_more_args(parser):
     parser.add_argument('--train_negative_class_size', type=int, default=8)
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
+    parser.add_argument('--data_samples_seed', type=int, default=None)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--template_id', type=str, default='beginning')
     parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
@@ -75,13 +77,16 @@ def main():
 
     if args['local']:
         os.environ['WANDB_MODE'] = 'disabled'
-    wandb.init(project='argument-maps', name=model_save_path.removeprefix(RESULTS_DIR),
+    experiment_name = model_save_path.removeprefix(RESULTS_DIR)
+    wandb.init(project='argument-maps',
+               name=experiment_name,
+               group=re.sub(r'-seed\d+', '', experiment_name) if '-seed' in experiment_name else experiment_name,
                # to fix "Error communicating with wandb process"
                # see https://docs.wandb.ai/guides/track/launch#init-start-error
                settings=wandb.Settings(start_method="fork"))
     wandb.config.update(args | {'data': 'kialoV2'})
 
-    templates.args = args
+    util.args = args
 
     data_splits = None
     main_domains = []
@@ -224,7 +229,7 @@ def prepare_samples(argument_maps, split_name, args, output_dir):
                             if args['train_per_map_size'] else (lambda x: x))
     for i, argument_map in enumerate(tqdm(argument_maps, f'preparing samples {split_name}')):
         argument_map_util = Evaluation(argument_map, no_ranks=True, max_candidates=args['max_candidates'])
-        all_parents = set(x for x in argument_map_util.parent_nodes)
+        all_parents = list(dict.fromkeys(x for x in argument_map_util.parent_nodes))
         for child, parent in get_samples_from_map(list(
                 zip(argument_map_util.child_nodes, argument_map_util.parent_nodes))):
             non_parents = [x for x in all_parents if x != parent]
@@ -235,8 +240,8 @@ def prepare_samples(argument_maps, split_name, args, output_dir):
 
     path = Path(output_dir + '-data')
     path.mkdir(exist_ok=True, parents=True)
-    (path / f'{split_name}-samples.json').write_text(json.dumps({k: [vars(x) for x in v[:10]]
-                                                                 for k, v in list(maps_samples.items())[:10]}))
+    (path / f'{split_name}-samples.json').write_text(json.dumps({k: [vars(x) for x in v[:100]]
+                                                                 for k, v in list(maps_samples.items())[:100]}))
     return maps_samples
 
 
