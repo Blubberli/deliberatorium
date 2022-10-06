@@ -1,4 +1,5 @@
 import argparse
+import argparse
 import faulthandler
 import itertools
 import json
@@ -77,10 +78,11 @@ def parse_args(add_more_args=None):
     return args
 
 
-def get_model_save_path(model_name, args, map_label=None):
-    model_save_path_prefix = (f'{args["output_dir_prefix"]}/' if args['output_dir_prefix'] else '') \
-                             + (f"domain{args['training_domain_index']}"
-                                if 'training_domain_index' in args and args['training_domain_index'] >= 0 else '')
+def get_output_dir(model_name, args, map_label=None):
+    model_save_path_prefix = '/'.join([(f'{args["output_dir_prefix"]}' if args['output_dir_prefix'] else ''),
+                                       (f"domain{args['training_domain_index']}"
+                                        if 'training_domain_index' in args and args['training_domain_index'] >= 0
+                                        else '')])
     # + model_name.replace("/", "-")
     model_save_path_prefix = model_save_path_prefix if model_save_path_prefix.startswith(RESULTS_DIR) else (
                 RESULTS_DIR + model_save_path_prefix)
@@ -112,13 +114,13 @@ def main():
     
     if args['eval_not_trained']:
         logging.info('eval all arguments as not part of training data')
-        save_path = get_model_save_path(args['eval_model_name_or_path'], args)
-        wandb.init(project='argument-maps', name=save_path,
+        output_dir = get_output_dir(args['eval_model_name_or_path'], args)
+        wandb.init(project='argument-maps', name=output_dir,
                    # to fix "Error communicating with wandb process"
                    # see https://docs.wandb.ai/guides/track/launch#init-start-error
                    settings=wandb.Settings(start_method="fork"))
         wandb.config.update(args)
-        eval(save_path, args, argument_maps)
+        eval(output_dir, args, argument_maps)
         exit()
 
     # prepare samples
@@ -147,7 +149,7 @@ def main():
     for i, argument_map_label in enumerate(maps_samples.keys()):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
-        model_save_path = get_model_save_path(model_name, args, argument_map_label)
+        model_save_path = get_output_dir(model_name, args, argument_map_label)
         logging.info(f'{model_save_path=}')
         logging.getLogger().handlers[0].flush()
 
@@ -206,7 +208,7 @@ def main():
 def eval(output_dir, args, argument_maps, training_map_index=-1):
     model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
                                 output_dir)
-    results_path = Path(output_dir + '-results')
+    results_path = Path(output_dir + '/results')
     results_path.mkdir(exist_ok=True, parents=True)
     encoder_mulitlingual = MapEncoder(max_seq_len=args['max_seq_length'],
                                       sbert_model_identifier=None,

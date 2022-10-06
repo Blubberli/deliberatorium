@@ -6,6 +6,7 @@ import math
 import os
 import random
 import re
+import shutil
 import signal
 import statistics
 from pathlib import Path
@@ -30,7 +31,7 @@ from kialo_domains_util import get_maps2uniquetopic
 from kialo_util import read_data, read_annotated_maps_ids, read_annotated_samples
 from templates import format_primary
 from util import remove_url_and_hashtags, sample
-from train_triplets_delib import parse_args, get_model_save_path, RESULTS_DIR
+from train_triplets_delib import parse_args, get_output_dir, RESULTS_DIR
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
 
@@ -71,13 +72,14 @@ def main():
     max_seq_length = args['max_seq_length']
     num_epochs = args['num_train_epochs']
 
-    model_save_path = get_model_save_path(model_name, args)
-    logging.info(f'{model_save_path=}')
+    output_dir = get_output_dir(model_name, args)
+    model_save_path = output_dir + '/' + 'model'
+    logging.info(f'{output_dir=}')
     logging.getLogger().handlers[0].flush()
 
     if args['local']:
         os.environ['WANDB_MODE'] = 'disabled'
-    experiment_name = model_save_path.removeprefix(RESULTS_DIR)
+    experiment_name = output_dir.removeprefix(RESULTS_DIR)
     wandb.init(project='argument-maps',
                name=experiment_name,
                group=re.sub(r'-seed\d+', '', experiment_name) if '-seed' in experiment_name else experiment_name,
@@ -113,7 +115,7 @@ def main():
             logging.info(f"{len(argument_maps)=} maps in domain args['training_domain_index']={args['training_domain']}")
             wandb.config.update(args | {'data': 'kialoV2'})
 
-        data_splits = split_data(argument_maps, args, model_save_path, seed)
+        data_splits = split_data(argument_maps, args, output_dir, seed)
 
     if args['do_train']:
         if args['train_maps_size']:
@@ -123,8 +125,8 @@ def main():
                 [x for x in data_splits['train'] if len(x.all_children) > args['train_per_map_size']],
                 args['train_maps_size'])
 
-        maps_samples = prepare_samples(data_splits['train'], 'train', args, model_save_path)
-        maps_samples_dev = prepare_samples(data_splits['dev'], 'dev', args, model_save_path)
+        maps_samples = prepare_samples(data_splits['train'], 'train', args, output_dir)
+        maps_samples_dev = prepare_samples(data_splits['dev'], 'dev', args, output_dir)
 
         word_embedding_model = models.Transformer(model_name, max_seq_length=max_seq_length)
         pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(), pooling_mode='mean')
@@ -167,21 +169,25 @@ def main():
                                      use_templates=args['use_templates'])
             all_results = []
             all_results.extend(
-                eval(model_save_path, data_splits['test'],
+                eval(output_dir, data_splits['test'],
                      domain=main_domains[args['training_domain_index']] if args['training_domain_index'] >= 0 else 'all',
                      max_candidates=args['max_candidates'],
                      map_encoder=map_encoder, cross_encoder=cross_encoder))
             if args['training_domain_index'] >= 0:
                 for domain in main_domains[:args['training_domain_index']] + main_domains[args['training_domain_index']+1:]:
-                    all_results.extend(eval(model_save_path, domain_argument_maps[domain], domain=domain,
+                    all_results.extend(eval(output_dir, domain_argument_maps[domain], domain=domain,
                                             max_candidates=args['max_candidates'],
                                             map_encoder=map_encoder, cross_encoder=cross_encoder))
             avg_results = get_avg(all_results)
-            (Path(model_save_path + '-results') / f'-avg.json').write_text(json.dumps(avg_results))
+            (Path(output_dir) / f'results/avg.json').write_text(json.dumps(avg_results))
             wandb.log({'test': {'avg': avg_results}})
 
         if args['do_eval_annotated_samples']:
-            eval_samples(model_save_path, args, model, cross_encoder)
+            eval_samples(output_dir, args, model, cross_encoder)
+
+    if args['do_train'] and (args['train_maps_size'] or args['train_per_map_size']):
+        # remove saved model
+        shutil.rmtree(Path(model_save_path))
 
 
 def split_data(argument_maps: list[KialoMap], args: dict, output_dir: str, seed: int):
@@ -214,7 +220,7 @@ def split_data(argument_maps: list[KialoMap], args: dict, output_dir: str, seed:
                                                             for k, v in data_splits.items()]))
 
     # save split ids
-    path = Path(output_dir + '-data')
+    path = Path(output_dir) / 'data'
     path.mkdir(exist_ok=True, parents=True)
     for split_name, split in data_splits.items():
         (path/f'{split_name}.json').write_text(json.dumps([x.id for x in split]))
@@ -238,7 +244,7 @@ def prepare_samples(argument_maps, split_name, args, output_dir):
     if args['debug_size']:
         maps_samples = {k: x[:args['debug_size']] for k, x in maps_samples.items()}
 
-    path = Path(output_dir + '-data')
+    path = Path(output_dir) / 'data'
     path.mkdir(exist_ok=True, parents=True)
     (path / f'{split_name}-samples.json').write_text(json.dumps({k: [vars(x) for x in v[:100]]
                                                                  for k, v in list(maps_samples.items())[:100]}))
@@ -300,7 +306,7 @@ def prepare_training(maps_samples, model, args):
 
 
 def eval(output_dir, argument_maps, domain, max_candidates, map_encoder: MapEncoder, cross_encoder: CrossEncoder):
-    results_path = Path(output_dir + '-results') / domain
+    results_path = Path(output_dir) / 'results' / domain
     results_path.mkdir(exist_ok=True, parents=True)
     all_results = []
     maps_all_results = {}
@@ -328,13 +334,13 @@ def eval(output_dir, argument_maps, domain, max_candidates, map_encoder: MapEnco
         #     table, "map id", "score", title="Detailed results per map id")}})
 
     avg_results = get_avg(all_results)
-    (results_path / f'-avg.json').write_text(json.dumps(avg_results))
+    (results_path / f'avg.json').write_text(json.dumps(avg_results))
     wandb.log({'test': {domain: {'avg': avg_results}}})
     return all_results
 
 
 def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: CrossEncoder):
-    results_path = Path(output_dir + '-results')
+    results_path = Path(output_dir) / 'results'
     results_path.mkdir(exist_ok=True, parents=True)
 
     samples = read_annotated_samples(args['local'], args)
