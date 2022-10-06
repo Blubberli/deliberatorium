@@ -45,8 +45,9 @@ def add_more_args(parser):
     parser.add_argument('--debug_map_index', type=str, default=None)
     parser.add_argument('--no_data_split', type=str, default=None)
     parser.add_argument('--training_domain_index', type=int, default=-1)
-    parser.add_argument('--train_method', type=str, default='mulneg')
-    parser.add_argument('--train_negative_class_size', type=int, default=8)
+    parser.add_argument('--train_method', choices=['mulneg', 'class', 'cossco'], default='mulneg')
+    parser.add_argument('--lr', type=float, default=2e-5)
+    parser.add_argument('--train_negatives_size', type=int, default=20)
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
     parser.add_argument('--data_samples_seed', type=int, default=None)
@@ -86,7 +87,7 @@ def main():
                # to fix "Error communicating with wandb process"
                # see https://docs.wandb.ai/guides/track/launch#init-start-error
                settings=wandb.Settings(start_method="fork"))
-    wandb.config.update(args | {'data': 'kialoV2'})
+    wandb.config.update(args | {'data': 'kialoV2', 'train_negative_class_size': args['train_negatives_size']})
 
     util.args = args
 
@@ -152,6 +153,7 @@ def main():
                   evaluation_steps=args['eval_steps'] if args['eval_steps'] else
                   (int(len(train_dataloader) * 0.1) if dev_evaluator else 0),
                   warmup_steps=warmup_steps,
+                  optimizer_params={'lr': args['lr']},
                   output_path=model_save_path,
                   use_amp=False  # Set to True, if your GPU supports FP16 operations
                   )
@@ -262,17 +264,22 @@ def prepare_training_samples(child, parent, non_parents, args):
                 non_parents = random.sample(non_parents, args['hard_negatives_size'])
                 return [create_primary_example([child, parent, non_parent], use_templates=args['use_templates'])
                         for non_parent in non_parents]
-    elif args['train_method'] == 'class':
-        return create_all_possible_examples(child, parent, label=1, use_templates=args['use_templates']) + \
+    elif args['train_method'] in ['class', 'cossco']:
+        return create_all_possible_examples(child, parent, label=1 if args['train_method'] == 'class' else 1.0,
+                                            use_templates=args['use_templates']) + \
                list(itertools.chain.from_iterable(
-                   create_all_possible_examples(child, non_parent, label=0, use_templates=args['use_templates'])
+                   create_all_possible_examples(child, non_parent,
+                                                label=0 if args['train_method'] == 'class' else 0.0,
+                                                use_templates=args['use_templates'])
                    # add negatives (move later to dataloader?)
-                   for non_parent in sample(non_parents, args['train_negative_class_size'])))
+                   for non_parent in sample(non_parents, args['train_negatives_size'])))
 
 
 def prepare_dev_samples(child, parent, non_parents, args):
-    return [create_primary_example([child, non_parent], label=0, use_templates=args['use_templates']) for non_parent in non_parents] + \
-           [create_primary_example([child, parent], label=1, use_templates=args['use_templates'])]
+    return [create_primary_example([child, non_parent], label=0 if args['train_method'] == 'class' else 0.0,
+                                   use_templates=args['use_templates']) for non_parent in non_parents] + \
+           [create_primary_example([child, parent], label=1 if args['train_method'] == 'class' else 1.0,
+                                   use_templates=args['use_templates'])]
 
 
 def create_all_possible_examples(child_node: ChildNode, parent_node: ChildNode, use_templates, label=0):
@@ -290,15 +297,18 @@ def create_primary_example(nodes: list[ChildNode], use_templates, label=0):
 
 def prepare_training(maps_samples, model, args):
     train_samples = list(itertools.chain(*maps_samples.values()))
+    # Special data loader that avoid duplicates within a batch
+    train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size']) \
+        if args['train_method'] == 'mulneg' \
+        else DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
     if args['train_method'] == 'mulneg':
-        # Special data loader that avoid duplicates within a batch
-        train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size'])
         train_loss = losses.MultipleNegativesRankingLoss(model)
     elif args['train_method'] == 'class':
-        train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
         train_loss = losses.SoftmaxLoss(model=model,
                                         sentence_embedding_dimension=model.get_sentence_embedding_dimension(),
                                         num_labels=2)
+    elif args['train_method'] == 'cossco':
+        train_loss = losses.CosineSimilarityLoss(model)
     else:
         raise NotImplementedError(f"{args['train_method']}")
     logging.info("Train samples: {}".format(len(train_samples)))
