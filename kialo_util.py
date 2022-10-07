@@ -14,14 +14,9 @@ LANGS = ['english', 'french', 'german', 'italian', 'other']
 
 def read_data(args):
     processed_maps_path = Path('temp/maps.pkl')
-    # fix for pickle
-    # RecursionError: maximum recursion depth exceeded while calling a Python object
-    recursion_limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(10000)
-    if processed_maps_path.exists():
-        print(f'reading processed maps from {processed_maps_path}')
-        with (open(processed_maps_path, 'rb')) as f:
-            return pickle.load(f)
+
+    if maps := read_maps(processed_maps_path):
+        return maps
 
     data_path = get_base_data_path(args['local']) / 'kialoV2'
 
@@ -45,12 +40,34 @@ def read_data(args):
                      if '(1)' not in _map.stem]
     print(f'remaining {len(maps)} maps after clean up')
 
-    processed_maps_path.parent.mkdir(exist_ok=True)
-    with open(processed_maps_path, 'wb') as f:
-        pickle.dump(argument_maps, f)
-    sys.setrecursionlimit(recursion_limit)
+    save_maps(argument_maps, processed_maps_path)
 
     return argument_maps
+
+
+def read_maps(path):
+    if path.exists():
+        # fix for pickle
+        # RecursionError: maximum recursion depth exceeded while calling a Python object
+        recursion_limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(10000)
+        print(f'reading processed maps from {path}')
+        with (open(path, 'rb')) as f:
+            maps = pickle.load(f)
+        sys.setrecursionlimit(recursion_limit)
+        return maps
+    return None
+
+
+def save_maps(argument_maps, path):
+    # fix for pickle
+    # RecursionError: maximum recursion depth exceeded while calling a Python object
+    recursion_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(10000)
+    path.parent.mkdir(exist_ok=True)
+    with open(path, 'wb') as f:
+        pickle.dump(argument_maps, f)
+    sys.setrecursionlimit(recursion_limit)
 
 
 def read_annotated_maps_ids(local: bool):
