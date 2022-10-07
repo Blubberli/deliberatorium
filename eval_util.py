@@ -6,14 +6,14 @@ from rerank_evaluation import RerankEvaluation
 METRICS = ['mrr', 'p5', 'p1', 'dist']
 
 
-def evaluate_map(encoder_mulitlingual, argument_map, node_types, max_candidates=0, cross_encoder=None,
+def evaluate_map(encoder, argument_map, node_types, max_candidates=0, cross_encoder=None,
                  eval_types=None):
     if eval_types is None:
         eval_types = ['only_leafs_limited_types']
     results = {}
     node_results = {}
     print(f'eval {argument_map.id} {len(argument_map.all_children)=} \n{argument_map.name}')
-    encoder_mulitlingual.encode_argument_map(argument_map)
+    encoder.encode_argument_map(argument_map)
 
     eval_args = {'argument_map': argument_map, 'only_leafs': False, 'max_candidates': max_candidates}
     if cross_encoder:
