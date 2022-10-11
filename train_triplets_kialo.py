@@ -53,7 +53,7 @@ def add_more_args(parser):
     parser.add_argument('--train_negatives_size', type=int, default=20)
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
-    parser.add_argument('--batch_from_same_map', type=lambda x: (str(x).lower() == 'true'), default=True)
+    parser.add_argument('--batch_from_same_map', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--data_samples_seed', type=int, default=None)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--template_id', type=str, default='beginning')
@@ -287,8 +287,9 @@ def prepare_dev_samples(child, parent, non_parents, args):
 
 def create_all_possible_examples(child_node: ChildNode, parent_node: ChildNode, use_templates, label=0):
     node_types = {1: 'pro', -1: 'con'}
-    templated_child, templated_parent = [templates.format_all_possible(x.name, t, use_templates) for x, t in
-                                         zip([child_node, parent_node], [node_types[child_node.type], 'parent'])]
+    templated_child, templated_parent = [
+        templates.format_all_possible(x.name, parent_node.name, t, use_templates) for x, t in
+        zip([child_node, parent_node], [node_types[child_node.type], 'parent'])]
     return [InputExample(texts=[c, p], label=label) for c, p in itertools.product(templated_child, templated_parent)]
 
 

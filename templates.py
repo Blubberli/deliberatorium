@@ -9,6 +9,7 @@ TEMPLATES = {
                  'parent': 'This sentence: "{}" is parent'},
     'pro/con': {'pro': 'pro: "{}"',
                 'con': 'contra: "{}"'},
+    'combined': {'combined': '"{}" is a child of "{}"'},
 }
 
 standard_template = 'beginning'
@@ -21,6 +22,10 @@ for k, v in TEMPLATES.items():
     if 'pro' in v:
         v['possible_templates']['pro'].append('pro')
         v['possible_templates']['con'].append('con')
+    if 'combined' in v:
+        for kk, vv in v['possible_templates'].items():
+            if kk != 'parent':
+                v['possible_templates'][kk].append('combined')
 
 
 # primary template is used as main template for eval
@@ -30,8 +35,8 @@ def format_primary(text: str, node_type: str, use_templates: bool):
     return TEMPLATES[util.args['template_id']][node_type].format(text)
 
 
-def format_all_possible(text: str, node_type: str, use_templates: bool):
+def format_all_possible(text: str, parent_text: str, node_type: str, use_templates: bool):
     if not use_templates:
         return [text]
-    return [TEMPLATES[util.args['template_id']][t].format(text) for t in
+    return [TEMPLATES[util.args['template_id']][t].format(*([text, parent_text] if t == 'combined' else [text])) for t in
             TEMPLATES[util.args['template_id']]['possible_templates'][node_type]]

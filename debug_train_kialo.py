@@ -13,6 +13,7 @@ sys.argv += '--hard_negatives False'.split(' ')
 sys.argv += '--lang english'.split(' ')
 sys.argv += '--use_templates True'.split(' ')
 # sys.argv += '--template_id pro/con'.split(' ')
+sys.argv += '--template_id combined'.split(' ')
 # sys.argv += '--use_dev True'.split(' ')
 
 
