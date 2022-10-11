@@ -26,6 +26,7 @@ import templates
 import util
 from argumentMap import KialoMap
 from childNode import ChildNode
+from data_loader import SameMapPerBatchDataLoader
 from eval_util import METRICS, evaluate_map, format_metrics
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
@@ -52,13 +53,14 @@ def add_more_args(parser):
     parser.add_argument('--train_negatives_size', type=int, default=20)
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
+    parser.add_argument('--batch_from_same_map', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--data_samples_seed', type=int, default=None)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--template_id', type=str, default='beginning')
-    parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
-    parser.add_argument('--do_eval_annotated_samples', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--do_eval_annotated_samples', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--save_embeddings', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--rerank', type=lambda x: (str(x).lower() == 'true'), default=False)
 
@@ -298,8 +300,9 @@ def create_primary_example(nodes: list[ChildNode], use_templates, label=0):
 
 def prepare_training(maps_samples, model, args):
     train_samples = list(itertools.chain(*maps_samples.values()))
-    # Special data loader that avoid duplicates within a batch
-    train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size']) \
+    train_dataloader = (SameMapPerBatchDataLoader(list(maps_samples.values()), batch_size=args['train_batch_size'])
+                        if args['batch_from_same_map'] else
+                        datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size'])) \
         if args['train_method'] == 'mulneg' \
         else DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
     if args['train_method'] == 'mulneg':

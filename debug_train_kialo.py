@@ -17,21 +17,21 @@ sys.argv += '--use_templates True'.split(' ')
 
 
 sys.argv += '--data_samples_seed 13'.split(' ')
-sys.argv += '--debug_maps_size 13 --train_maps_size 1 --train_per_map_size 8 --train_batch_size 8'.split(' ')
+sys.argv += '--debug_maps_size 13 --train_maps_size 2 --train_per_map_size 16 --train_batch_size 8'.split(' ')
 
 # sys.argv += '--train_method class'.split(' ')
 # sys.argv += '--train_method cossco'.split(' ')
 
 # sys.argv += '--eval_model_name_or_path sentence-transformers/paraphrase-albert-small-v2'.split(' ')
-sys.argv += '--do_train False'.split(' ')
+# sys.argv += '--do_train False'.split(' ')
 
 # sys.argv += '--rerank True'.split(' ')
 
 sys.argv += '--annotated_samples_in_test True --debug_map_index 17763'.split(' ')
 
 # eval annotated samples
-sys.argv += '--do_eval False'.split(' ')
-sys.argv += '--do_eval_annotated_samples True --debug_maps_size 3'.split(' ')
+# sys.argv += '--do_eval False'.split(' ')
+# sys.argv += '--do_eval_annotated_samples True --debug_maps_size 3'.split(' ')
 
 # save embeddings
 sys.argv += '--save_embeddings True'.split(' ')
