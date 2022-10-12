@@ -34,9 +34,12 @@ def format_primary(text: str, node_type: str, use_templates: bool):
     return TEMPLATES[util.args['template_id']][node_type].format(text)
 
 
-def format_all_possible(text: str, parent_text: str, node_type: str, use_templates: bool):
+def format_all_possible(text: str, parent_text: str, node_type: str, use_templates: bool, parent=True):
     if not use_templates:
         return [text]
+
+    if not parent:
+        text = f'not {text}'
 
     if util.args['template_id'] == 'all':
         if node_type == 'parent':

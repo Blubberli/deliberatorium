@@ -57,6 +57,7 @@ def add_more_args(parser):
     parser.add_argument('--data_samples_seed', type=int, default=None)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--template_id', type=str, default='beginning')
+    parser.add_argument('--template_not', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
@@ -259,7 +260,9 @@ def prepare_samples(argument_maps, split_name, args, output_dir):
 def prepare_training_samples(child, parent, non_parents, args):
     if args['train_method'] == 'mulneg':
         if not args['hard_negatives']:
-            return create_all_possible_examples(child, parent, args['use_templates'])
+            return create_all_possible_examples(child, parent, args['use_templates'], label=1) + \
+                   (create_all_possible_examples(child, sample(non_parents, 1)[0], args['use_templates'], label=1)
+                    if args['template_not'] else [])
         else:
             if args['use_templates']:
                 raise NotImplementedError('hard negatives not supported')
@@ -285,10 +288,10 @@ def prepare_dev_samples(child, parent, non_parents, args):
                                    use_templates=args['use_templates'])]
 
 
-def create_all_possible_examples(child_node: ChildNode, parent_node: ChildNode, use_templates, label=0):
+def create_all_possible_examples(child_node: ChildNode, parent_node: ChildNode, use_templates, label):
     node_types = {1: 'pro', -1: 'con'}
     templated_child, templated_parent = [
-        templates.format_all_possible(x.name, parent_node.name, t, use_templates) for x, t in
+        templates.format_all_possible(x.name, parent_node.name, t, use_templates, label) for x, t in
         zip([child_node, parent_node], [node_types[child_node.type], 'parent'])]
     return [InputExample(texts=[c, p], label=label) for c, p in itertools.product(templated_child, templated_parent)]
 
