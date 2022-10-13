@@ -3,7 +3,7 @@ import re
 from abc import ABC, abstractmethod
 import pickle as pkl
 import networkx as nx
-from childNode import DelibChildNode, KialoChildNode
+from childNode import DelibChildNode, KialoChildNode, ChildNode
 
 
 class ArgumentMap(ABC):
@@ -27,13 +27,15 @@ class ArgumentMap(ABC):
         self.id = self.data["id"]
         self.name = self.data["name"].strip()
         self.direct_children = self.init_children()
-        all_children = []
+        all_nodes = []
         # create a list that stores all nodes of a map by iterating through the first level of nodes
         # and calling the recursive method for each child.
         for child in self.direct_children:
-            all_children = self.get_all_children(node=child, child_list=all_children)
-        self.all_children = all_children
-        self.all_children_dict = {x.id: x for x in all_children}
+            all_nodes = self.get_all_children(node=child, child_list=all_nodes)
+        self.all_nodes = all_nodes
+        self.all_nodes_dict = {x.id: x for x in all_nodes}
+        self.child_nodes: list[ChildNode] = [node for node in self.all_nodes if node.parent]
+        self.parent_nodes: list[ChildNode] = [child.parent for child in self.child_nodes]
 
     @abstractmethod
     def load_data(self, data_path) -> dict:
@@ -56,7 +58,7 @@ class ArgumentMap(ABC):
 
     def number_of_children(self):
         """Returns the number of child nodes in the map"""
-        return len(self.all_children)
+        return len(self.all_nodes)
 
     def __str__(self):
         return str(self.name)
@@ -156,7 +158,7 @@ class KialoMap(ArgumentMap):
 
     def get_max_depth(self):
         """Return the maximal tree depth of this map"""
-        return max([node.get_level() for node in self.all_children])
+        return max([node.get_level() for node in self.all_nodes])
 
     @staticmethod
     def remove_links(sentence):

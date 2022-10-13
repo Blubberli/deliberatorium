@@ -84,7 +84,7 @@ class TestEvaluation(unittest.TestCase):
         np.testing.assert_almost_equal(self.evaluation_all_close_relatives.mean_reciprocal_rank(ranks), mrr, decimal=2)
 
     def test_taxonomic_distance(self):
-        nodes = self.small_map.all_children
+        nodes = self.small_map.all_nodes
         node1 = nodes[0]
         node2 = nodes[3]
         # distance should be 2

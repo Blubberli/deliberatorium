@@ -17,7 +17,7 @@ def extract_node_samples_from_depth_bins(argument_map, node_type=None):
     tree level (3 labels); COL4: whether PRO or CON
     """
     # get all leaf nodes
-    leaf_nodes = [node for node in argument_map.all_children if node.is_leaf]
+    leaf_nodes = [node for node in argument_map.all_nodes if node.is_leaf]
     # remove nodes that are too short
     leaf_nodes = [node for node in leaf_nodes if len(node.name.split(" ")) > 5]
 
@@ -62,7 +62,7 @@ def extract_candidates(argument_map, target_node_df):
     for i in range(len(target_node_df)):
         node = target_node_df["nodes"].values[i]
         coarse_level = target_node_df["coarse_level"].values[i]
-        candidates = argument_map.all_children
+        candidates = argument_map.all_nodes
         # filter for length
         # candidates = [n for n in candidates if len(n.name.split(" ")) > 5]
         close_candidates = [candidate for candidate in candidates if

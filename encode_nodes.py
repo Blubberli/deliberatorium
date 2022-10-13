@@ -50,7 +50,7 @@ class MapEncoder:
         :param path: [str] the location of the argument map to be encoded
         :return: a dictionary with embddings, corresponding sentences and corresponding IDs
         """
-        nodes = argument_map.all_children
+        nodes = argument_map.all_nodes
         sentences = [node.name for node in nodes]
         unique_ids = [node.id for node in nodes]
         if self.use_descriptions:
@@ -80,7 +80,7 @@ class MapEncoder:
     def add_stored_embeddings(self, argument_map, path_to_pckl):
         """Given a path of pregenerated embeddings, add"""
         data = self.load_embeddings(path_to_pckl=path_to_pckl)
-        nodes = argument_map.all_children
+        nodes = argument_map.all_nodes
         for node in nodes:
             id = node.id
             embedding = data[id]

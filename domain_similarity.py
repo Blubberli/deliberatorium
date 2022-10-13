@@ -34,7 +34,7 @@ def read_vocab_from_map(map, only_content_words=False):
     :param only_content_words: if set to true the lemma list will only contain content words (adjectives, nouns..)
     :return: a list of lemmata extracted from the content of a map
     """
-    all_text = [node.name for node in map.all_children]
+    all_text = [node.name for node in map.all_nodes]
     # use the medium model trained on web data from spacy, use english (translations have to be used for e.g. IT maps)
     nlp = spacy.load("en_core_web_sm", disable=['parser', 'ner'])
     lemmas = []
@@ -461,7 +461,7 @@ def createTextBasedDocumentsFromMaps():
         argument_map = KialoMap(path)
         thread = argument_map.name
         outpath.write(thread)
-        for node in argument_map.all_children:
+        for node in argument_map.all_nodes:
             text = node.name
             if not "-> " in text:
                 outpath.write(text + "\n")

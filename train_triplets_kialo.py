@@ -26,7 +26,7 @@ import templates
 import util
 from argumentMap import KialoMap
 from childNode import ChildNode
-from data_loader import SameMapPerBatchDataLoader
+from data_loader import SameMapPerBatchDataLoader, validate_for_no_duplicates_batch
 from eval_util import METRICS, evaluate_map, format_metrics
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
@@ -129,7 +129,7 @@ def main():
             logging.info(f"{args['train_maps_size']=}")
             data_splits['train'] = util.sample(
                 # filter to maps with #children strictly more than needed (root can't be used)
-                [x for x in data_splits['train'] if len(x.all_children) > args['train_per_map_size']],
+                [x for x in data_splits['train'] if len(x.child_nodes) > args['train_per_map_size']],
                 args['train_maps_size'])
 
         maps_samples = prepare_samples(data_splits['train'], 'train', args, output_dir)
@@ -304,11 +304,13 @@ def create_primary_example(nodes: list[ChildNode], use_templates, label=0):
 
 def prepare_training(maps_samples, model, args):
     train_samples = list(itertools.chain(*maps_samples.values()))
-    train_dataloader = (SameMapPerBatchDataLoader(list(maps_samples.values()), batch_size=args['train_batch_size'])
-                        if args['batch_from_same_map'] else
-                        datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size'])) \
-        if args['train_method'] == 'mulneg' \
-        else DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
+    if args['train_method'] == 'mulneg':
+        validate_for_no_duplicates_batch(train_samples, args['train_batch_size'])
+        train_dataloader = (SameMapPerBatchDataLoader(list(maps_samples.values()), batch_size=args['train_batch_size'])
+                            if args['batch_from_same_map'] else
+                            datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size']))
+    else:
+        train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
     if args['train_method'] == 'mulneg':
         train_loss = losses.MultipleNegativesRankingLoss(model)
     elif args['train_method'] == 'class':
