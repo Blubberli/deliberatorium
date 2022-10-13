@@ -62,7 +62,8 @@ def add_more_args(parser):
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
     parser.add_argument('--do_eval_annotated_samples', type=lambda x: (str(x).lower() == 'true'), default=True)
-    parser.add_argument('--save_embeddings', type=lambda x: (str(x).lower() == 'true'), default=True)
+    parser.add_argument('--save_embeddings', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--save_detailed_results', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--rerank', type=lambda x: (str(x).lower() == 'true'), default=False)
 
 
@@ -96,6 +97,10 @@ def main():
     wandb.config.update(args | {'data': 'kialoV2', 'train_negative_class_size': args['train_negatives_size']})
 
     util.args = args
+    # save args
+    path = Path(output_dir) / 'data'
+    path.mkdir(exist_ok=True, parents=True)
+    (path / f'args.json').write_text(json.dumps(args))
 
     data_splits = None
     main_domains = []
@@ -344,8 +349,9 @@ def eval(output_dir, argument_maps: list[KialoMap], domain, map_encoder: MapEnco
             maps_all_results[argument_map.label] = results
             all_results.append(results)
     finally:
-        (results_path / f'all_maps.json').write_text(json.dumps(maps_all_results))
-        (results_path / f'all_nodes.json').write_text(json.dumps(nodes_all_results))
+        if args['save_detailed_results']:
+            (results_path / f'all_maps.json').write_text(json.dumps(maps_all_results))
+            (results_path / f'all_nodes.json').write_text(json.dumps(nodes_all_results))
         # wandb.log({'test': maps_all_results})
         # wandb.log({'test': all_results})
         # data = [[map_name.rsplit('-', 1)[-1], v] for map_name, v in maps_all_results.items()]
