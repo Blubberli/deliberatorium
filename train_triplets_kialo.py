@@ -54,6 +54,7 @@ def add_more_args(parser):
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
     parser.add_argument('--batch_from_same_map', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--strict_batch_size', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--data_samples_seed', type=int, default=None)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--template_id', type=str, default='beginning')
@@ -145,6 +146,8 @@ def main():
         model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
         train_dataloader, train_loss = prepare_training(maps_samples, model, args)
+
+        (path / f'args.json').write_text(json.dumps(args | {'actual_train_batch_size': train_dataloader.batch_size}))
 
         dev_samples = list(itertools.chain(*maps_samples_dev.values()))
         dev_evaluator = (EmbeddingSimilarityEvaluator.from_input_examples(
@@ -310,10 +313,13 @@ def create_primary_example(nodes: list[ChildNode], use_templates, label=0):
 def prepare_training(maps_samples, model, args):
     train_samples = list(itertools.chain(*maps_samples.values()))
     if args['train_method'] == 'mulneg':
-        validate_for_no_duplicates_batch(train_samples, args['train_batch_size'])
-        train_dataloader = (SameMapPerBatchDataLoader(list(maps_samples.values()), batch_size=args['train_batch_size'])
+        possible_batch_size = validate_for_no_duplicates_batch(train_samples, args['train_batch_size'],
+                                                               args['strict_batch_size'])
+        batch_size = min(possible_batch_size, args['train_batch_size'])
+        logging.info(f"{possible_batch_size=} vs {args['train_batch_size']=} => actual {batch_size=}")
+        train_dataloader = (SameMapPerBatchDataLoader(list(maps_samples.values()), batch_size=batch_size)
                             if args['batch_from_same_map'] else
-                            datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size']))
+                            datasets.NoDuplicatesDataLoader(train_samples, batch_size=batch_size))
     else:
         train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
     if args['train_method'] == 'mulneg':

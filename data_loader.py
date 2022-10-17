@@ -52,7 +52,7 @@ class SameMapPerBatchDataLoader(sentence_transformers.datasets.NoDuplicatesDataL
 
 
 # based on sentence_transformers.datasets.NoDuplicatesDataLoader
-def validate_for_no_duplicates_batch(train_examples, batch_size):
+def validate_for_no_duplicates_batch(train_examples, batch_size, strict=True):
     texts_in_batch = set()
     possible_batch_size = 0
 
@@ -68,5 +68,8 @@ def validate_for_no_duplicates_batch(train_examples, batch_size):
             for text in example.texts:
                 texts_in_batch.add(text.strip().lower())
 
-    assert possible_batch_size >= batch_size, \
-        f"not enough samples: {possible_batch_size=} < {batch_size=}"
+    if strict:
+        assert possible_batch_size >= batch_size, \
+            f"not enough samples: {possible_batch_size=} < {batch_size=}"
+
+    return possible_batch_size
