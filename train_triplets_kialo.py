@@ -54,7 +54,7 @@ def add_more_args(parser):
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
     parser.add_argument('--batch_from_same_map', type=lambda x: (str(x).lower() == 'true'), default=False)
-    parser.add_argument('--strict_batch_size', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--strict_batch_size', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--data_samples_seed', type=int, default=None)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--template_id', type=str, default='beginning')
