@@ -12,7 +12,7 @@ def evaluate_map(encoder, argument_map, node_types, max_candidates=0, cross_enco
         eval_types = ['only_leafs_limited_types']
     results = {}
     node_results = {}
-    print(f'eval {argument_map.id} {len(argument_map.all_children)=} \n{argument_map.name}')
+    print(f'eval {argument_map.id} {len(argument_map.all_nodes)=} \n{argument_map.name}')
     encoder.encode_argument_map(argument_map)
 
     eval_args = {'argument_map': argument_map, 'only_leafs': False, 'max_candidates': max_candidates}
@@ -58,4 +58,4 @@ def create_evaluation(eval_args: dict):
 
 
 def format_metrics(metrics):
-    return ' , '.join([f"{k}: {v:.3f}" for k, v in metrics.items()])
+    return ' , '.join([f"{k}: {v:.2f}" for k, v in metrics.items()])

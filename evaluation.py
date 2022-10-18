@@ -22,7 +22,7 @@ class Evaluation:
         # argument map with encoded nodes
         self.argument_map = argument_map
         # gather all nodes in the map and construct a node2index and an embedding matrix
-        self.all_nodes = self.argument_map.all_children
+        self.all_nodes = self.argument_map.all_nodes
         # extract the nodes to be tested
         self.child_nodes: list[ChildNode] = self.get_child_nodes(only_leafs, child_node_type, candidate_node_types)
         # extract their corresponding parents
@@ -52,7 +52,7 @@ class Evaluation:
     def get_child_nodes(self, only_leafs, child_node_type, candidate_node_types):
         """Extract the child nodes to be used for evaluation. Apply filtering rules if specified."""
         # case 1: I want to test all possible child nodes in this map
-        child_nodes = [node for node in self.all_nodes if node.parent]
+        child_nodes = self.argument_map.child_nodes
         # case 2: I only want to test leaf nodes (= the nodes that were added 'the latest')
         if only_leafs:
             child_nodes = [node for node in child_nodes if node.is_leaf]
@@ -141,5 +141,5 @@ class Evaluation:
         self.taxonomic_distances = []
         for i in range(len(self.child_nodes)):
             self.taxonomic_distances.append(self.child_nodes[i].shortest_path(
-                self.argument_map.all_children_dict[self.predictions[i][0]['id']]))
+                self.argument_map.all_nodes_dict[self.predictions[i][0]['id']]))
         return np.quantile(self.taxonomic_distances, quartile, interpolation='midpoint')

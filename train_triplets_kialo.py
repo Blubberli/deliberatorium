@@ -1,3 +1,4 @@
+import copy
 import faulthandler
 import itertools
 import json
@@ -25,6 +26,7 @@ import templates
 import util
 from argumentMap import KialoMap
 from childNode import ChildNode
+from data_loader import SameMapPerBatchDataLoader, validate_for_no_duplicates_batch
 from eval_util import METRICS, evaluate_map, format_metrics
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
@@ -51,14 +53,18 @@ def add_more_args(parser):
     parser.add_argument('--train_negatives_size', type=int, default=20)
     parser.add_argument('--train_maps_size', type=int, default=0)
     parser.add_argument('--train_per_map_size', type=int, default=0)
+    parser.add_argument('--batch_from_same_map', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--strict_batch_size', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--data_samples_seed', type=int, default=None)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--template_id', type=str, default='beginning')
-    parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--template_not', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--annotated_samples_in_test', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--use_dev', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--max_candidates', type=int, default=0)
-    parser.add_argument('--do_eval_annotated_samples', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--do_eval_annotated_samples', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--save_embeddings', type=lambda x: (str(x).lower() == 'true'), default=False)
+    parser.add_argument('--save_detailed_results', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--rerank', type=lambda x: (str(x).lower() == 'true'), default=False)
 
 
@@ -92,6 +98,10 @@ def main():
     wandb.config.update(args | {'data': 'kialoV2', 'train_negative_class_size': args['train_negatives_size']})
 
     util.args = args
+    # save args
+    path = Path(output_dir) / 'data'
+    path.mkdir(exist_ok=True, parents=True)
+    (path / f'args.json').write_text(json.dumps(args))
 
     data_splits = None
     main_domains = []
@@ -125,7 +135,7 @@ def main():
             logging.info(f"{args['train_maps_size']=}")
             data_splits['train'] = util.sample(
                 # filter to maps with #children strictly more than needed (root can't be used)
-                [x for x in data_splits['train'] if len(x.all_children) > args['train_per_map_size']],
+                [x for x in data_splits['train'] if len(x.child_nodes) > args['train_per_map_size']],
                 args['train_maps_size'])
 
         maps_samples = prepare_samples(data_splits['train'], 'train', args, output_dir)
@@ -136,6 +146,8 @@ def main():
         model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
         train_dataloader, train_loss = prepare_training(maps_samples, model, args)
+
+        (path / f'args.json').write_text(json.dumps(args | {'actual_train_batch_size': train_dataloader.batch_size}))
 
         dev_samples = list(itertools.chain(*maps_samples_dev.values()))
         dev_evaluator = (EmbeddingSimilarityEvaluator.from_input_examples(
@@ -256,7 +268,9 @@ def prepare_samples(argument_maps, split_name, args, output_dir):
 def prepare_training_samples(child, parent, non_parents, args):
     if args['train_method'] == 'mulneg':
         if not args['hard_negatives']:
-            return create_all_possible_examples(child, parent, args['use_templates'])
+            return create_all_possible_examples(child, parent, args['use_templates'], label=1) + \
+                   (create_all_possible_examples(child, sample(non_parents, 1)[0], args['use_templates'], label=1)
+                    if args['template_not'] else [])
         else:
             if args['use_templates']:
                 raise NotImplementedError('hard negatives not supported')
@@ -282,10 +296,11 @@ def prepare_dev_samples(child, parent, non_parents, args):
                                    use_templates=args['use_templates'])]
 
 
-def create_all_possible_examples(child_node: ChildNode, parent_node: ChildNode, use_templates, label=0):
+def create_all_possible_examples(child_node: ChildNode, parent_node: ChildNode, use_templates, label):
     node_types = {1: 'pro', -1: 'con'}
-    templated_child, templated_parent = [templates.format_all_possible(x.name, t, use_templates) for x, t in
-                                         zip([child_node, parent_node], [node_types[child_node.type], 'parent'])]
+    templated_child, templated_parent = [
+        templates.format_all_possible(x.name, parent_node.name, t, use_templates, label) for x, t in
+        zip([child_node, parent_node], [node_types[child_node.type], 'parent'])]
     return [InputExample(texts=[c, p], label=label) for c, p in itertools.product(templated_child, templated_parent)]
 
 
@@ -297,10 +312,16 @@ def create_primary_example(nodes: list[ChildNode], use_templates, label=0):
 
 def prepare_training(maps_samples, model, args):
     train_samples = list(itertools.chain(*maps_samples.values()))
-    # Special data loader that avoid duplicates within a batch
-    train_dataloader = datasets.NoDuplicatesDataLoader(train_samples, batch_size=args['train_batch_size']) \
-        if args['train_method'] == 'mulneg' \
-        else DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
+    if args['train_method'] == 'mulneg':
+        possible_batch_size = validate_for_no_duplicates_batch(train_samples, args['train_batch_size'],
+                                                               args['strict_batch_size'])
+        batch_size = min(possible_batch_size, args['train_batch_size'])
+        logging.info(f"{possible_batch_size=} vs {args['train_batch_size']=} => actual {batch_size=}")
+        train_dataloader = (SameMapPerBatchDataLoader(list(maps_samples.values()), batch_size=batch_size)
+                            if args['batch_from_same_map'] else
+                            datasets.NoDuplicatesDataLoader(train_samples, batch_size=batch_size))
+    else:
+        train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=args['train_batch_size'])
     if args['train_method'] == 'mulneg':
         train_loss = losses.MultipleNegativesRankingLoss(model)
     elif args['train_method'] == 'class':
@@ -334,8 +355,9 @@ def eval(output_dir, argument_maps: list[KialoMap], domain, map_encoder: MapEnco
             maps_all_results[argument_map.label] = results
             all_results.append(results)
     finally:
-        (results_path / f'all_maps.json').write_text(json.dumps(maps_all_results))
-        (results_path / f'all_nodes.json').write_text(json.dumps(nodes_all_results))
+        if args['save_detailed_results']:
+            (results_path / f'all_maps.json').write_text(json.dumps(maps_all_results))
+            (results_path / f'all_nodes.json').write_text(json.dumps(nodes_all_results))
         # wandb.log({'test': maps_all_results})
         # wandb.log({'test': all_results})
         # data = [[map_name.rsplit('-', 1)[-1], v] for map_name, v in maps_all_results.items()]
@@ -359,7 +381,7 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
     results_path.mkdir(exist_ok=True, parents=True)
 
     samples = read_annotated_samples(args['local'], args)
-    embeddings = samples.copy() if args['save_embeddings'] else None
+    embeddings = copy.deepcopy(samples) if args['save_embeddings'] else None
     for node_id, sample in tqdm(samples.items(), desc='encode and evaluate annotated samples'):
         sample['text'] = remove_url_and_hashtags(sample['text'])
         candidates = []
@@ -377,8 +399,8 @@ def eval_samples(output_dir, args, encoder: SentenceTransformer, cross_encoder: 
         sample['rank'], sample['predictions'] = ranks[0], predictions[0]
 
         if args['save_embeddings']:
-            embeddings['embedding'] = node_embedding
-            embeddings['candidates_embedding'] = candidates_embedding
+            embeddings[node_id]['embedding'] = node_embedding.cpu().detach().numpy()
+            embeddings[node_id]['candidates_embedding'] = candidates_embedding.cpu().detach().numpy()
 
     metrics = Evaluation.calculate_metrics([x['rank'] for x in samples.values()])
     logging.info(format_metrics(metrics))

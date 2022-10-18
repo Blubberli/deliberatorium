@@ -71,7 +71,7 @@ def extract_random_map_from_filtering(maps, min_size, max_size, min_depth, max_d
 
 def extract_node_samples_from_depth_bins(argument_map, node_type=None):
     # get all leaf nodes
-    leaf_nodes = [node for node in argument_map.all_children if node.is_leaf]
+    leaf_nodes = [node for node in argument_map.all_nodes if node.is_leaf]
     # remove nodes that are too short
     leaf_nodes = [node for node in leaf_nodes if len(node.name.split(" ")) > 5]
 
@@ -126,7 +126,7 @@ def extract_candidates(argument_map, target_node_df):
     for i in range(len(target_node_df)):
         node = target_node_df["nodes"].values[i]
         coarse_level = target_node_df["coarse_level"].values[i]
-        candidates = argument_map.all_children
+        candidates = argument_map.all_nodes
         # filter for length
         # candidates = [n for n in candidates if len(n.name.split(" ")) > 5]
         close_candidates = [candidate for candidate in candidates if
@@ -620,16 +620,16 @@ def get_annotation_info_dic():
             map = KialoMap("/Users/falkne/PycharmProjects/deliberatorium/data/kialoV2/english/%s.pkl" % map_id)
             child_id = gold["ID"].values[0]
             parent_id = gold["parentID"].values[0]
-            childnode = [el for el in map.all_children if el.id == str(child_id)]
+            childnode = [el for el in map.all_nodes if el.id == str(child_id)]
             child_text = gold["target node"].values[0]
 
             old_id = None
             if not childnode:
-                for el in map.all_children:
+                for el in map.all_nodes:
                     if child_text in el.name:
                         old_id = child_id
                         child_id = el.id
-                        childnode = [el for el in map.all_children if el.id == str(child_id)]
+                        childnode = [el for el in map.all_nodes if el.id == str(child_id)]
             childtype = childnode[0].type
             child2info[child_id] = {"topic": topic, "map_id": map_id, "child_type": childtype, "child_id": child_id,
                                     "map_size": map.number_of_children(), "map_depth": map.max_depth,
