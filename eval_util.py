@@ -58,4 +58,4 @@ def create_evaluation(eval_args: dict):
 
 
 def format_metrics(metrics):
-    return ' , '.join([f"{k}: {v:.2f}" for k, v in metrics.items()])
+    return ' , '.join([f"{k}: {v:.3f}" for k, v in metrics.items()])
