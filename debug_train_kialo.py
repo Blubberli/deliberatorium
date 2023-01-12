@@ -4,6 +4,7 @@ import train_triplets_kialo
 # sys.argv += '--train_method cossco --template_id None --train_maps_size 1 --train_per_map_size 8 --data_samples_seed 100 --train_batch_size 16 --lr 0.001'.split(' ')
 # sys.argv += '--lang english --model_name_or_path sentence-transformers/all-mpnet-base-v2 --hard_negatives False --annotated_samples_in_test True --do_eval_annotated_samples True --model_name_or_path sentence-transformers/all-mpnet-base-v2 --train_method mulneg --template_id None --train_maps_size 1 --train_per_map_size 8 --data_samples_seed 13 --train_batch_size 8 --output_dir_prefix results/few-shot-seeds-mulneg/all-mpnet-mulneg-n8in1-seed13'.split(' ')
 # sys.argv += '--lang english --model_name_or_path sentence-transformers/all-mpnet-base-v2 --hard_negatives False --annotated_samples_in_test True --do_eval_annotated_samples True --model_name_or_path sentence-transformers/all-mpnet-base-v2 --train_method mulneg --template_id pro/con --train_maps_size 1 --train_per_map_size 8 --data_samples_seed 13 --use_templates True --train_batch_size 8 --output_dir_prefix results/few-shot-seeds-mulneg/all-mpnet-mulneg-pro_con-n8in1-seed13'.split(' ')
+# sys.argv += '--lang english --model_name_or_path sentence-transformers/all-mpnet-base-v2 --hard_negatives False --annotated_samples_in_test True --do_eval_annotated_samples True --model_name_or_path sentence-transformers/all-mpnet-base-v2 --train_method mulneg --template_id foo --template_not False --train_maps_size 32 --train_per_map_size 8 --data_samples_seed 21 --use_templates True --train_batch_size 8 --output_dir_prefix results/more-few-shot-seeds/all-mpnet-mulneg-foo-n8in32-seed21'.split(' ')
 
 sys.argv += ['--local', 'True']
 # sys.argv += ['--debug_maps_size', '10']
@@ -15,6 +16,7 @@ sys.argv += '--use_templates True'.split(' ')
 # sys.argv += '--template_id pro/con'.split(' ')
 # sys.argv += '--template_id combined'.split(' ')
 # sys.argv += '--template_id all'.split(' ')
+sys.argv += '--template_id all-meaningless'.split(' ')
 # sys.argv += '--use_dev True'.split(' ')
 
 
