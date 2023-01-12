@@ -27,7 +27,7 @@ for experiment in experiments:
             node_type = x.type
             node_type_stats[node_type].append(x)
 
-    {k: (len(v), len(v) / len(node_type_stats[None])) for k, v in node_type_stats.items()}
+    print({k: (len(v), len(v) / len(node_type_stats[None])) for k, v in node_type_stats.items()})
 
     # ## Analyse Node Results
 
