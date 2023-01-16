@@ -6,11 +6,12 @@ import util
 UNIQUE_TEMPLATES = {
     'beginning': {'child': 'child: "{}"',
                   'parent': 'parent: "{}"'},
-    'foo': {'child': 'foo: "{}"',
-            'parent': 'bar: "{}"'},
+    # 'foo': {'child': 'foo: "{}"',
+    #         'parent': 'bar: "{}"'},
     'pro/con': {'pro': 'pro: "{}"',
                 'con': 'contra: "{}"'},
     'combined': {'child': 'child: "{}" parent: "{}"'},
+    'combined_short': {'child': '"{}" parent: "{}"'},
     'combined_pro/con': {'pro': 'pro: "{}" parent: "{}"',
                          'con': 'contra: "{}" parent: "{}"'},
     'all': {},
@@ -18,15 +19,16 @@ UNIQUE_TEMPLATES = {
 }
 
 MEANINGLESS_UNIQUE_TEMPLATES = {
-    'foo': {'child': 'foo: "{}"',
-            'parent': 'bar: "{}"'},
-    'beginning': {'child': 'baz: "{}"',
-                  'parent': 'qux: "{}"'},
-    'pro/con': {'pro': 'grault: "{}"',
-                'con': 'garply: "{}"'},
-    'combined': {'child': '"{}" waldo "{}"'},
-    'combined_pro/con': {'pro': 'grault: "{}" qux: "{}"',
-                         'con': 'garply: "{}" qux: "{}"'},
+    # 'foo': {'child': 'foo: "{}"',
+    #         'parent': 'bar: "{}"'},
+    'beginning': {'child': 'foo: "{}"',
+                  'parent': 'bar: "{}"'},
+    'pro/con': {'pro': 'baz: "{}"',
+                'con': 'qux: "{}"'},
+    'combined': {'child': 'foo: "{}" bar: "{}"'},
+    'combined_short': {'child': '"{}" bar: "{}"'},
+    'combined_pro/con': {'pro': 'baz: "{}" bar: "{}"',
+                         'con': 'qux: "{}" bar: "{}"'},
     'all': {},
     'all-meaningless': {}
 }
@@ -50,8 +52,9 @@ for k, v in TEMPLATES.items():
 def format_primary(text: str, node_type: str, use_templates: bool):
     if not use_templates:
         return text
-    template_id = util.args['template_id'] if util.args['template_id'] != 'all-meaningless' else 'foo'
-    return TEMPLATES[template_id][node_type].format(text)
+    template = TEMPLATES[util.args['template_id']] if util.args['template_id'] != 'all-meaningless' else \
+        MEANINGLESS_UNIQUE_TEMPLATES['beginning']
+    return template[node_type].format(text)
 
 
 def format_all_possible(text: str, parent_text: str, node_type: str, use_templates: bool, parent=True):
@@ -80,11 +83,11 @@ def format_using_template(text: str, parent_text: str, node_type: str, template_
             for t in POSSIBLE_TEMPLATES[node_type] if t in templates[template_id]]
 
 
-util.args = {}
-util.args['template_id'] = 'all'
+# util.args = {}
+# util.args['template_id'] = 'all'
 # util.args['template_id'] = 'all-meaningless'
-
-print('child')
-print(*[x for x in format_all_possible('child_text', 'parent_text', 'pro', True, True)], sep='\n')
-print('parent')
-print(*[x for x in format_all_possible('parent_text', 'grand_text', 'parent', True, True)], sep='\n')
+#
+# print('child')
+# print(*[x for x in format_all_possible('child_text', 'parent_text', 'pro', True, True)], sep='\n')
+# print('parent')
+# print(*[x for x in format_all_possible('parent_text', 'grand_text', 'parent', True, True)], sep='\n')
