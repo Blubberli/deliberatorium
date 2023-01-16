@@ -8,11 +8,11 @@ UNIQUE_TEMPLATES = {
                   'parent': 'parent: "{}"'},
     'foo': {'child': 'foo: "{}"',
             'parent': 'bar: "{}"'},
-    'detailed': {'child': 'This sentence: "{}" is child',
-                 'parent': 'This sentence: "{}" is parent'},
     'pro/con': {'pro': 'pro: "{}"',
                 'con': 'contra: "{}"'},
-    'combined': {'combined': '"{}" is a child of "{}"'},
+    'combined': {'child': 'child: "{}" parent: "{}"'},
+    'combined_pro/con': {'pro': 'pro: "{}" parent: "{}"',
+                         'con': 'contra: "{}" parent: "{}"'},
     'all': {},
     'all-meaningless': {}
 }
@@ -22,19 +22,19 @@ MEANINGLESS_UNIQUE_TEMPLATES = {
             'parent': 'bar: "{}"'},
     'beginning': {'child': 'baz: "{}"',
                   'parent': 'qux: "{}"'},
-    'detailed': {'child': 'quux: "{}"',
-                 'parent': 'corge: "{}"'},
     'pro/con': {'pro': 'grault: "{}"',
                 'con': 'garply: "{}"'},
-    'combined': {'combined': '"{}" waldo "{}"'},
+    'combined': {'child': '"{}" waldo "{}"'},
+    'combined_pro/con': {'pro': 'grault: "{}" qux: "{}"',
+                         'con': 'garply: "{}" qux: "{}"'},
     'all': {},
     'all-meaningless': {}
 }
 
 POSSIBLE_TEMPLATES = {
     'parent': ['parent'],
-    'pro': ['child', 'pro', 'combined'],
-    'con': ['child', 'con', 'combined']
+    'pro': ['child', 'pro'],
+    'con': ['child', 'con']
 }
 
 standard_template = 'beginning'
@@ -76,12 +76,15 @@ def format_all_possible(text: str, parent_text: str, node_type: str, use_templat
 
 
 def format_using_template(text: str, parent_text: str, node_type: str, template_id: str, templates: dict):
-    return [templates[template_id][t].format(*([text, parent_text] if t == 'combined' else [text]))
+    return [templates[template_id][t].format(*([text, parent_text] if 'combined' in template_id else [text]))
             for t in POSSIBLE_TEMPLATES[node_type] if t in templates[template_id]]
 
 
-# util.args = {}
+util.args = {}
+util.args['template_id'] = 'all'
 # util.args['template_id'] = 'all-meaningless'
-#
-# print(*[x for x in format_all_possible('child_text', 'parent_text', 'pro', True, True)], sep='\n')
-# print(*[x for x in format_all_possible('parent_text', 'grand_text', 'parent', True, True)], sep='\n')
+
+print('child')
+print(*[x for x in format_all_possible('child_text', 'parent_text', 'pro', True, True)], sep='\n')
+print('parent')
+print(*[x for x in format_all_possible('parent_text', 'grand_text', 'parent', True, True)], sep='\n')
