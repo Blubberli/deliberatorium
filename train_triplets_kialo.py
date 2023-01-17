@@ -56,6 +56,7 @@ def add_more_args(parser):
     parser.add_argument('--batch_from_same_map', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--strict_batch_size', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--data_samples_seed', type=int, default=None)
+    parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--use_templates', type=lambda x: (str(x).lower() == 'true'), default=False)
     parser.add_argument('--template_id', type=str, default='beginning')
     parser.add_argument('--template_not', type=lambda x: (str(x).lower() == 'true'), default=False)
@@ -73,7 +74,7 @@ def main():
 
     args = parse_args(add_more_args)
 
-    seed = 42
+    seed = args['seed']
     set_seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
 
