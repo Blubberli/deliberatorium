@@ -48,13 +48,23 @@ for k, v in TEMPLATES.items():
         v['parent'] = TEMPLATES[standard_template]['parent']
 
 
+# todo refactor
+current = {}
+
+
+def init():
+    current['templates'], current['unique_templates'] = ((TEMPLATES, UNIQUE_TEMPLATES)
+                                                         if util.args['template_id'] not in ['foo', 'all-meaningless']
+                                                         else (MEANINGLESS_UNIQUE_TEMPLATES,
+                                                               MEANINGLESS_UNIQUE_TEMPLATES))
+    current['template_id'] = util.args['template_id'] if util.args['template_id'] != 'foo' else 'beginning'
+
+
 # primary template is used as main template for eval
 def format_primary(text: str, node_type: str, use_templates: bool):
     if not use_templates:
         return text
-    template = TEMPLATES[util.args['template_id']] if util.args['template_id'] != 'all-meaningless' else \
-        MEANINGLESS_UNIQUE_TEMPLATES['beginning']
-    return template[node_type].format(text)
+    return current['unique_templates'][standard_template][node_type].format(text)
 
 
 def format_all_possible(text: str, parent_text: str, node_type: str, use_templates: bool, parent=True):
@@ -64,18 +74,18 @@ def format_all_possible(text: str, parent_text: str, node_type: str, use_templat
     if not parent:
         text = f'not {text}'
 
-    if util.args['template_id'] in ('all', 'all-meaningless'):
-        if node_type == 'parent':
-            # use one parent representation to avoid repetition of same parent in the same batch
-            return [format_primary(text, node_type, use_templates)]
-        else:
-            return list(itertools.chain.from_iterable(
-                format_using_template(
-                    text, parent_text, node_type, t,
-                    UNIQUE_TEMPLATES if util.args['template_id'] == 'all' else MEANINGLESS_UNIQUE_TEMPLATES)
-                for t in UNIQUE_TEMPLATES.keys()))
+    if node_type == 'parent':
+        # use one parent representation to avoid repetition of same parent in the same batch
+        return [format_primary(text, node_type, use_templates)]
+
+    if util.args['template_id'].startswith('all'):
+        return list(itertools.chain.from_iterable(
+            format_using_template(
+                text, parent_text, node_type, t,
+                current['unique_templates'])
+            for t in UNIQUE_TEMPLATES.keys()))
     else:
-        return format_using_template(text, parent_text, node_type, util.args['template_id'], TEMPLATES)
+        return format_using_template(text, parent_text, node_type, current['template_id'], current['templates'])
 
 
 def format_using_template(text: str, parent_text: str, node_type: str, template_id: str, templates: dict):
@@ -86,8 +96,10 @@ def format_using_template(text: str, parent_text: str, node_type: str, template_
 # util.args = {}
 # util.args['template_id'] = 'all'
 # util.args['template_id'] = 'all-meaningless'
+# util.args['template_id'] = 'foo'
+# init()
 #
 # print('child')
-# print(*[x for x in format_all_possible('child_text', 'parent_text', 'pro', True, True)], sep='\n')
+# print(*[x for x in format_all_possible('child text', 'parent text', 'pro', True, True)], sep='\n')
 # print('parent')
-# print(*[x for x in format_all_possible('parent_text', 'grand_text', 'parent', True, True)], sep='\n')
+# print(*[x for x in format_all_possible('parent text', 'grand text', 'parent', True, True)], sep='\n')

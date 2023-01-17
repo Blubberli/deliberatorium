@@ -104,6 +104,8 @@ def main():
     path.mkdir(exist_ok=True, parents=True)
     (path / f'args.json').write_text(json.dumps(args))
 
+    templates.init()
+
     data_splits = None
     main_domains = []
     if args['do_train'] or args['do_eval']:
