@@ -15,7 +15,8 @@ UNIQUE_TEMPLATES = {
     'combined_pro/con': {'pro': 'pro: "{}" parent: "{}"',
                          'con': 'contra: "{}" parent: "{}"'},
     'all': {},
-    'all-meaningless': {}
+    'all-meaningless': {},
+    'all-all': {}
 }
 
 MEANINGLESS_UNIQUE_TEMPLATES = {
@@ -30,7 +31,8 @@ MEANINGLESS_UNIQUE_TEMPLATES = {
     'combined_pro/con': {'pro': 'baz: "{}" bar: "{}"',
                          'con': 'qux: "{}" bar: "{}"'},
     'all': {},
-    'all-meaningless': {}
+    'all-meaningless': {},
+    'all-all': {}
 }
 
 POSSIBLE_TEMPLATES = {
@@ -53,10 +55,11 @@ current = {}
 
 
 def init():
-    current['templates'], current['unique_templates'] = ((TEMPLATES, UNIQUE_TEMPLATES)
-                                                         if util.args['template_id'] not in ['foo', 'all-meaningless']
-                                                         else (MEANINGLESS_UNIQUE_TEMPLATES,
-                                                               MEANINGLESS_UNIQUE_TEMPLATES))
+    combine = UNIQUE_TEMPLATES | {k + '_meaningless': v for k, v in MEANINGLESS_UNIQUE_TEMPLATES.items()}
+    current['templates'], current['unique_templates'] = ((MEANINGLESS_UNIQUE_TEMPLATES, MEANINGLESS_UNIQUE_TEMPLATES)
+                                                         if util.args['template_id'] in ['foo', 'all-meaningless'] else
+                                                         ((combine, combine) if util.args['template_id'] == 'all-all'
+                                                          else (TEMPLATES, UNIQUE_TEMPLATES)))
     current['template_id'] = util.args['template_id'] if util.args['template_id'] != 'foo' else 'beginning'
 
 
@@ -83,7 +86,7 @@ def format_all_possible(text: str, parent_text: str, node_type: str, use_templat
             format_using_template(
                 text, parent_text, node_type, t,
                 current['unique_templates'])
-            for t in UNIQUE_TEMPLATES.keys()))
+            for t in current['unique_templates'].keys()))
     else:
         return format_using_template(text, parent_text, node_type, current['template_id'], current['templates'])
 
@@ -97,6 +100,7 @@ def format_using_template(text: str, parent_text: str, node_type: str, template_
 # util.args['template_id'] = 'all'
 # util.args['template_id'] = 'all-meaningless'
 # util.args['template_id'] = 'foo'
+# util.args['template_id'] = 'all-all'
 # init()
 #
 # print('child')
