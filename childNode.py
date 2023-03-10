@@ -1,6 +1,8 @@
 from event import Event
 from abc import ABC, abstractmethod
 
+from util import remove_url_and_hashtags
+
 
 class ChildNode(ABC):
     """
@@ -29,6 +31,7 @@ class ChildNode(ABC):
         self.is_leaf = True if len(self.direct_children) == 0 else False
         self.parent = None
         self.embedding = None
+        self.extra_embeddings = {}
         self.siblings = []
         # set this node as parent for each of its' children
         for child in self.direct_children:
@@ -160,7 +163,11 @@ class KialoChildNode(ChildNode):
         depth: The tree depth of this node
         :param node_dict: the dictionary representation of the node
         """
+        node_dict["name"] = remove_url_and_hashtags(node_dict["name"])
         super(KialoChildNode, self).__init__(node_dict)
+        self.created = node_dict["created"]
+        self.impact = node_dict["impact"]
+        self.edited = node_dict["edited"]
         self.depth = self.get_depth()
 
     def init_direct_children(self, node_dict):

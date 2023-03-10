@@ -11,6 +11,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
 import numpy as np
+import pickle
 import matplotlib.pyplot as plt
 
 # define the POS tags of content words (vs function words)
@@ -21,6 +22,9 @@ IT_MAPS = {"Doparia sulla legge elettorale (m1)", "Doparia sulla legge elettoral
 main_topics = {"religion", "gender", "enviroment", "animals", "democracy", "europe", "technology", "education",
                "history", "violence", "war", "business", "human rights", "health", "morality", "philosophy",
                "science"}
+DELIB2SHORTNAME = {"Doparia sulla legge elettorale (m1)": "doparia1", "Doparia sulla legge elettorale (m2)": "doparia2",
+                   "Naples Biofuels Discussion": "biofuels", "CI4CG": "collectiveIntelligence",
+                   "RCOM Emerging Solutions - Opportunity Assessment": "RCOM"}
 
 
 def read_vocab_from_map(map, only_content_words=False):
@@ -30,7 +34,7 @@ def read_vocab_from_map(map, only_content_words=False):
     :param only_content_words: if set to true the lemma list will only contain content words (adjectives, nouns..)
     :return: a list of lemmata extracted from the content of a map
     """
-    all_text = [node.name for node in map.all_children]
+    all_text = [node.name for node in map.all_nodes]
     # use the medium model trained on web data from spacy, use english (translations have to be used for e.g. IT maps)
     nlp = spacy.load("en_core_web_sm", disable=['parser', 'ner'])
     lemmas = []
@@ -67,7 +71,7 @@ def get_map_lemmas(maps, translated_map_path=None):
     for _, map in maps.items():
         if map.name in IT_MAPS and translated_map_path:
             lemmas = read_vocab_from_file(
-                translated_map_path % map.name, True)
+                "%s/%s.txt" % (translated_map_path, map.name), True)
         else:
             lemmas = read_vocab_from_map(map, True)
         maps2lemmas[map.name] = lemmas
@@ -133,25 +137,27 @@ def tfidf_similairty(vector_1, vector_2):
     return similarity
 
 
-def read_all_maps():
-    """read all maps from deliberatorium and kialo, return them as two dictionaries"""
-    data_path = Path.home() / "data/e-delib/deliberatorium/maps/kialo_maps"
+def read_kialo_maps(path_to_kialo):
+    data_path = Path(path_to_kialo)
     maps = os.listdir(data_path)
     kialo_maps = {}
     for i in tqdm(range(len(maps))):
         map = maps[i]
         path = "%s/%s" % (data_path, map)
+
         argument_map = KialoMap(path)
-        kialo_maps[argument_map.name.strip()] = argument_map
+        kialo_maps[int(argument_map.id.strip())] = argument_map
+    return kialo_maps
 
-    data_path = Path.home() / "data/e-delib/deliberatorium/maps/deliberatorium_maps"
+
+def read_deliberatorium_maps(path_to_deliberatorium):
+    data_path = Path(path_to_deliberatorium)
     maps = os.listdir(data_path)
-
     deliberatorium_maps = {}
     for map in maps:
         argument_map = DeliberatoriumMap("%s/%s" % (str(data_path), map))
         deliberatorium_maps[argument_map.name] = argument_map
-    return kialo_maps, deliberatorium_maps
+    return deliberatorium_maps
 
 
 def tag_headmap_kialo(path_kialo2topics, n, outpath, cut_most_frequent=False):
@@ -198,31 +204,26 @@ def main_domains(path_kialo2topics, maintopics):
     #         out_path="data/plots/main_topics_heatmap.png")
 
 
-def kialo_maps2topic(path_kialo2topics, maintopics):
+def kialo_maps2topic(path_kialo2topics, maintopics, outpath):
     map2unique, _ = get_maps2uniquetopic(path_kialo2topics, maintopics)
-    kialomaps, _ = read_all_maps()
+    kialomaps = read_kialo_maps(path_to_kialo="/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/english")
     topic2numberofnodes = defaultdict(int)
     smallest = 1000
     for mapname, topic in map2unique.items():
-        if mapname not in kialomaps:
-            print(mapname)
-        else:
-            map = kialomaps[mapname]
-            nodes = map.number_of_children()
-            if map.number_of_children() < smallest:
-                smallest = map.number_of_children()
-                smalles_map = mapname
-            topic2numberofnodes[topic] += nodes
-    print(smalles_map)
-    print(smallest)
-    print(topic2numberofnodes)
+
+        map = kialomaps[mapname]
+        nodes = map.number_of_children()
+        if map.number_of_children() < smallest:
+            smallest = map.number_of_children()
+            smalles_map = mapname
+        topic2numberofnodes[topic] += nodes
     topic2numberofnodes = {k: v for k, v in sorted(topic2numberofnodes.items(), key=lambda item: item[1])}
     plt.barh(list(topic2numberofnodes.keys()), list(topic2numberofnodes.values()))
     plt.title("number of nodes per domain")
     plt.ylabel("domain")
     plt.xlabel("number of nodes")
     plt.tight_layout()
-    plt.savefig("data/plots/node_distribution_domains.png", dpi=1500)
+    plt.savefig(outpath, dpi=1000)
 
 
 def heat_map(vocab, map2topics, out_path):
@@ -236,7 +237,7 @@ def heat_map(vocab, map2topics, out_path):
     sns.set(font_scale=0.5)
     sns.heatmap(vocab_matrix, xticklabels=vocab, yticklabels=vocab)
     plt.tight_layout()
-    plt.savefig(out_path, dpi=1500)
+    plt.savefig(out_path, dpi=1000)
 
 
 def get_cooccurrence_matrix(vocab, map2topics):
@@ -252,11 +253,11 @@ def get_cooccurrence_matrix(vocab, map2topics):
         for tag1 in map_topics:
             if tag1 in vocab2index:
                 index1 = vocab2index[tag1]
-            for tag2 in map_topics:
-                if tag2 in vocab2index:
-                    index2 = vocab2index[tag2]
-                    if index1 != index2:
-                        vocab_matrix[index1][index2] += 1
+                for tag2 in map_topics:
+                    if tag2 in vocab2index:
+                        index2 = vocab2index[tag2]
+                        if index1 != index2:
+                            vocab_matrix[index1][index2] += 1
     return vocab_matrix, vocab2index
 
 
@@ -267,19 +268,22 @@ def create_domains(path_kialo2topics, outpath):
     vocab = vocab[10:]
     vocab_matrix, vocab2index = get_cooccurrence_matrix(vocab, map2topics)
     index2vocab = dict(zip(range(len(vocab)), vocab))
+
     wordjointwords = defaultdict(set)
-    # collect co-ocurrences of <= 15
+    # collect co-ocurrences of >= 15
     for i in range(len(vocab)):
         for j in range(len(vocab)):
             if i != j:
                 joint_freq = vocab_matrix[i][j]
-                if joint_freq >= 15:
+                if joint_freq >= 12:
                     word1 = index2vocab[i]
                     word2 = index2vocab[j]
                     wordjointwords[word1].add(word2)
                     wordjointwords[word2].add(word2)
                     wordjointwords[word2].add(word1)
                     wordjointwords[word1].add(word1)
+    print(wordjointwords)
+
     word2replacement = {}
     # create labels that consist of the tags that co-occur more than 15 times
     for k, v in wordjointwords.items():
@@ -290,7 +294,9 @@ def create_domains(path_kialo2topics, outpath):
                     v.update(v2)
                     word2replacement[k] = "/".join(sorted(list(v)))
     replaced_vocab = list(set([word2replacement[w] if w in word2replacement else w for w in vocab]))
+    print(replaced_vocab)
     print("reduced vocab is %d" % len(replaced_vocab))
+
     heat_map(vocab=replaced_vocab, map2topics=map2topics, out_path=outpath)
 
 
@@ -357,18 +363,46 @@ def get_topic_similarity_heatmapTFIDF_top50():
                                   "/Users/falkne/PycharmProjects/deliberatorium/data/plots/tfIDF_similarity_top50outdomain.png")
 
 
+def get_kialodomain2kialodomain_similarity_matrix(map2unique_topic):
+    kialo_vectors = np.load(
+        "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/kialoIDFs.npy")
+    kialo_vectors = np.squeeze(kialo_vectors, axis=1)
+    kialonames = open(
+        "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/kialoMapNames.txt",
+        "r").readlines()
+    kialonames = [int(el.strip()) for el in kialonames]
+    # get a full matrix of pair-wise cosine similarities between all maps (based on their tf-idf vectors)
+    map2map_similarity_matrix = cosine_similarity(kialo_vectors, kialo_vectors, dense_output=True)
+    map2id = dict(zip(kialonames, range(0, len(kialonames))))
+    # create a dic that will keep track of each topic and all similarities of that topic to other topics
+    domain2similarities = defaultdict(dict)
+    # iterate through all topics and append the similarity between each map and each other map, keeping track of the topic
+    for m, topic1 in map2unique_topic.items():
+        if m in map2id:
+            id1 = map2id[m]
+            for m2, topic2 in map2unique_topic.items():
+                if m2 in map2id and m2 != m:
+                    id2 = map2id[m2]
+                    cosine_sim = map2map_similarity_matrix[id1][id2]
+                    if topic2 not in domain2similarities[topic1]:
+                        domain2similarities[topic1][topic2] = []
+                    domain2similarities[topic1][topic2].append(cosine_sim)
+    return domain2similarities
+
+
 def get_cosine_similarity_matrix(map2topics, top50=None):
-    tfidf_vectors = np.load("/Users/falkne/PycharmProjects/deliberatorium/kialo_tfidf_vectorsminfreq3.npy")
+    tfidf_vectors = np.load(
+        "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/kialoIDFs.npy")
     tfidf_vectors = np.squeeze(tfidf_vectors, axis=1)
     # create the vocab matrix based on all maps
-    maps = open("data/map_names.txt", "r").readlines()
+    maps = open("/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/kialoMapNames.txt",
+                "r").readlines()
     maps = [el.strip() for el in maps]
     map2id = dict(zip(maps, range(0, len(maps))))
     # get a full matrix of pair-wise cosine similarities between all maps (based on their tf-idf vectors)
     map2map_similarity_matrix = cosine_similarity(tfidf_vectors, tfidf_vectors, dense_output=True)
     # create a dic that will keep track of each topic and all similarities of that topic to other topics
     domain2similarities = defaultdict(dict)
-
     # iterate through all topics and append the similarity between each map and each other map, keeping track of the topic
     for m, topic1 in map2topics.items():
         if m in map2id:
@@ -411,7 +445,7 @@ def plot_heatmap_tfidf_similarity(topics2similarities, vocab, save_path):
     matrix = np.triu(vocab_matrix)
     sns.set(font_scale=0.3)
     sns.heatmap(vocab_matrix, xticklabels=vocab, yticklabels=vocab, center=0,
-                square=False, linewidths=.5, cbar_kws={"shrink": .8}, annot=False, mask=matrix)
+                square=False, linewidths=.5, cbar_kws={"shrink": .8}, annot=True, mask=matrix)
     plt.tight_layout()
     plt.savefig(save_path, dpi=1500)
 
@@ -427,7 +461,7 @@ def createTextBasedDocumentsFromMaps():
         argument_map = KialoMap(path)
         thread = argument_map.name
         outpath.write(thread)
-        for node in argument_map.all_children:
+        for node in argument_map.all_nodes:
             text = node.name
             if not "-> " in text:
                 outpath.write(text + "\n")
@@ -436,18 +470,195 @@ def createTextBasedDocumentsFromMaps():
 
 def create_heatmap_tfIDFsimilarity_mainDomains():
     # create a mapping from Argument map to main topic
-    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialomaps2maintopics.tsv"
-    main_topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kialo_domains.tsv"
-    map2unique, topic2submapping = get_maps2uniquetopic(kialo2topics, main_topics)
+    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/ENmapID2topicTags.txt"
+    maintopics = "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/maintopic2subtopic.tsv"
+    map2unique, (map2topics, _, _) = get_maps2uniquetopic(kialo2topics, maintopics)
     # a list of unique main topics
     main_tops = list(set(list(map2unique.values())))
+    print(main_tops)
+
     # load the TF-IDF vectors for all Kialo maps
 
     # iterate through all topics and append the similarity between each map and each other map, keeping track of the topic
-    domain2similarities = get_cosine_similarity_matrix(map2unique)
+    domain2similarities = get_kialodomain2kialodomain_similarity_matrix(map2unique)
     plot_heatmap_tfidf_similarity(domain2similarities, main_tops,
-                                  "/Users/falkne/PycharmProjects/deliberatorium/data/plots/tfIDF_similarity_maintopic.png")
+                                  "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/topics/tfIDF_similarity_maintopic.png")
+
+
+def create_tfidf_vectorizer_delib_and_kialo():
+    kialo_path = Path("/Users/falkne/PycharmProjects/deliberatorium/data/kialoV2/english")
+    kialo_maps = list(kialo_path.glob(f"*.pkl"))
+    print(kialo_maps)
+    import pickle as pkl
+    import networkx as nx
+    nlp = spacy.load("en_core_web_sm", disable=['parser', 'ner'])
+    map2lemmas = {}
+    for file in tqdm(kialo_maps):
+        with open(file, "rb") as f:
+            data = pkl.load(f)
+            id = str(file).split("/")[-1].replace(".pkl", "")
+            sentences = [n["text"] for n in data.node.values()]
+            lemmas = []
+            for doc in nlp.pipe(sentences, batch_size=20):
+                lemma_list = [str(tok.lemma_).lower() for tok in doc]
+                pos_tags = [str(tok.pos_).lower() for tok in doc]
+                lemma_list = [lemma_list[i] for i in range(len(pos_tags)) if pos_tags[i] in CONTENTWORD_POSTAGS]
+                lemmas.append(lemma_list)
+            lemmas = list(itertools.chain(*lemmas))
+            map2lemmas[id] = lemmas
+    delibmaps = read_deliberatorium_maps("/maps/deliberatorium_maps")
+    delib2lemmas = get_map_lemmas(delibmaps,
+                                  translated_map_path="/Users/falkne/PycharmProjects/deliberatorium/deliberatorium_mapcontent/translations")
+    for k, v in delib2lemmas.items():
+        map2lemmas[k] = v
+    vect = build_vectorizer(map2lemmas)
+    with open('kialodelibvectorizerV2.pk', 'wb') as fin:
+        pickle.dump(vect, fin)
+
+
+def create_tfidf_vectors_delib_and_kialo():
+    result_path = "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/"
+    with open('kialodelibvectorizerV2.pk', 'rb') as fin:
+        vectorizer = pickle.load(fin)
+    print("loaded vectorizer successfully")
+    delibmaps = read_deliberatorium_maps("/Users/falkne/data/e-delib/deliberatorium/maps/deliberatorium_maps")
+    delib2lemmas = get_map_lemmas(delibmaps,
+                                  translated_map_path="/Users/falkne/PycharmProjects/deliberatorium/deliberatorium_mapcontent/translations")
+    delibidf = []
+    map_names = []
+    for map, lemmas in delib2lemmas.items():
+        tfidf = get_tfidf_vector(lemmas=lemmas, vectorizer=vectorizer)
+        map_names.append(map)
+        delibidf.append(tfidf)
+    delibidf = np.array(delibidf)
+    with open('%sdelibIDFs.npy' % result_path, 'wb') as f:
+        np.save(f, delibidf)
+    with open("%sdelibMapNames.txt" % result_path, "w") as f:
+        for name in map_names:
+            f.write(name + "\n")
+
+    kialo_path = Path("/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/english")
+    kialo_maps = list(kialo_path.glob(f"*.pkl"))
+    print(kialo_maps)
+    import pickle as pkl
+    import networkx as nx
+    nlp = spacy.load("en_core_web_sm", disable=['parser', 'ner'])
+    map2lemmas_kialo = {}
+    for file in tqdm(kialo_maps):
+        with open(file, "rb") as f:
+            data = pkl.load(f)
+            id = int(str(file).split("/")[-1].replace(".pkl", ""))
+            sentences = [n["text"] for n in data.node.values()]
+            lemmas = []
+            for doc in nlp.pipe(sentences, batch_size=20):
+                lemma_list = [str(tok.lemma_).lower() for tok in doc]
+                pos_tags = [str(tok.pos_).lower() for tok in doc]
+                lemma_list = [lemma_list[i] for i in range(len(pos_tags)) if pos_tags[i] in CONTENTWORD_POSTAGS]
+                lemmas.append(lemma_list)
+            lemmas = list(itertools.chain(*lemmas))
+            map2lemmas_kialo[id] = lemmas
+    print("lemmas created")
+    kialoidfs = []
+    map_names = []
+    for map, lemmas in tqdm(map2lemmas_kialo.items()):
+        tfidf = get_tfidf_vector(lemmas=lemmas, vectorizer=vectorizer)
+        kialoidfs.append(tfidf)
+        map_names.append(map)
+    kialoidfs = np.array(kialoidfs)
+    with open('%skialoIDFs.npy' % result_path, 'wb') as f:
+        np.save(f, kialoidfs)
+    with open("%skialoMapNames.txt" % result_path, "w") as f:
+        for name in map_names:
+            f.write(str(name) + "\n")
+
+
+def delib2kialo_heatmaps():
+    delib_vectors = np.load(
+        "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/delibIDFs.npy")
+    delib_vectors = np.squeeze(delib_vectors, axis=1)
+
+    kialo_vectors = np.load(
+        "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/kialoIDFs.npy")
+    kialo_vectors = np.squeeze(kialo_vectors, axis=1)
+
+    delibmaps = open(
+        "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/delibMapNames.txt",
+        "r").readlines()
+    delibmaps = [DELIB2SHORTNAME[el.strip()] for el in delibmaps]
+
+    kialonames = open(
+        "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/kialoMapNames.txt",
+        "r").readlines()
+    kialonames = [int(el.strip()) for el in kialonames]
+
+    matrix = cosine_similarity(delib_vectors, kialo_vectors, dense_output=True)
+    print(matrix.shape)
+
+    kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/ENmapID2topicTags.txt"
+    maintopics = "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/maintopic2subtopic.tsv"
+    mapt2unique, (map2topics, _, _) = get_maps2uniquetopic(kialo2topics, maintopics)
+
+    delib2topicsims = {}
+    for i in range(len(delibmaps)):
+        delibmap = delibmaps[i]
+        if delibmap not in delib2topicsims:
+            delib2topicsims[delibmap] = defaultdict(list)
+        for j in range(len(kialo_vectors)):
+            current_kialo_map = kialonames[j]
+            currentsim = matrix[i][j]
+            if current_kialo_map in mapt2unique:
+                currenttopic = mapt2unique[current_kialo_map]
+                delib2topicsims[delibmap][currenttopic].append(currentsim)
+
+    main_tops = list(set(list(mapt2unique.values())))
+
+    topic2index = dict(zip(main_tops, range(len(main_tops))))
+    delibmap2index = dict(zip(delibmaps, range(len(delibmaps))))
+    print(delibmap2index)
+    vocab_matrix = np.zeros(shape=[len(main_tops), len(delibmaps)])
+
+    for delmap, topicsims in delib2topicsims.items():
+        delibindex = delibmap2index[delmap]
+        print(delibindex)
+        for tops, sims in topicsims.items():
+            avg = np.average(sims)
+            topicindex = topic2index[tops]
+            vocab_matrix[topicindex][delibindex] = avg
+
+    # matrix = np.triu(vocab_matrix)
+    sns.set(font_scale=0.3)
+    sns.heatmap(vocab_matrix, xticklabels=delibmaps, yticklabels=main_tops, center=0,
+                square=True, linewidths=.5, cbar_kws={"shrink": .8}, annot=True)
+    plt.tight_layout()
+    plt.savefig("/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/topics/delib2kialoV2topics.png",
+                dpi=1500)
+
 
 # vocab overlap between each map within deliberatorium
 # vocab overlap for each map in delib to the kialo maps
 # most important tf-idf content words for each delib map, number of unique content words
+
+def create_merged_vectorizer():
+    delibmaps = read_deliberatorium_maps("/Users/falkne/data/e-delib/deliberatorium/maps/deliberatorium_maps")
+    map2lemmas = get_map_lemmas(delibmaps,
+                                translated_map_path="/Users/falkne/PycharmProjects/deliberatorium/deliberatorium_mapcontent/translations")
+    kialomaps = read_kialo_maps("/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/english")
+    map2lemmas_kialo = get_map_lemmas(kialomaps)
+    for k, v in map2lemmas_kialo.items():
+        map2lemmas[k] = v
+    vect = build_vectorizer(map2lemmas)
+    with open('/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/document_vectors/kialodelibvectorizer.pk',
+              'wb') as fin:
+        pickle.dump(vect, fin)
+
+
+# vocab overlap between each map within deliberatorium
+# vocab overlap for each map in delib to the kialo maps
+# most important tf-idf content words for each delib map, number of unique content words
+if __name__ == '__main__':
+    path_kialo2topics = "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/ENmapID2topicTags.txt",
+    maintopics = "/Users/falkne/PycharmProjects/deliberatorium/data/kilaoV2Langs/maintopic2subtopic.tsv",
+    # create_merged_vectorizer()
+    # create_tfidf_vectors_delib_and_kialo()
+    # delib2kialo_heatmaps()
+    create_heatmap_tfIDFsimilarity_mainDomains()

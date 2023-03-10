@@ -1,4 +1,5 @@
 import argparse
+import argparse
 import faulthandler
 import itertools
 import json
@@ -14,9 +15,11 @@ from sentence_transformers import models, losses, datasets
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 
 from argumentMap import DeliberatoriumMap
-from baseline import evaluate_map
+from eval_util import evaluate_map
 from encode_nodes import MapEncoder
 from evaluation import Evaluation
+
+RESULTS_DIR = 'results/'
 
 AVAILABLE_MAPS = ['dopariam1', 'dopariam2', 'biofuels', 'RCOM', 'CI4CG']
 
@@ -34,14 +37,15 @@ def parse_args(add_more_args=None):
     parser.add_argument('--do_train', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--do_eval', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--eval_not_trained', type=lambda x: (str(x).lower() == 'true'), default=False)
-    parser.add_argument('--model_name_or_path', help="model", type=str, default='xlm-roberta-base')
+    parser.add_argument('--model_name_or_path', help="model", type=str)
     parser.add_argument('--eval_model_name_or_path', help="model", type=str, default=None)
     parser.add_argument('--output_dir_prefix', type=str, default=None)
     parser.add_argument('--output_dir_label', type=str)
     parser.add_argument('--num_train_epochs', type=int, default=1)
     parser.add_argument('--train_batch_size', type=int, default=64)
     parser.add_argument('--eval_steps', type=int, default=1000)
-    parser.add_argument('--lang', help="english, italian, *", type=str, default='*')
+    parser.add_argument('--lang', help="english, italian,..", type=str, default=None)
+    parser.add_argument('--max_seq_length', type=int, default=256)
     parser.add_argument('--use_descriptions', type=lambda x: (str(x).lower() == 'true'), default=True)
     parser.add_argument('--argument_map',
                         help=f"argument map from {', '.join(AVAILABLE_MAPS)} to train on",
@@ -74,11 +78,14 @@ def parse_args(add_more_args=None):
     return args
 
 
-def get_model_save_path(model_name, args, map_label=None):
-    model_save_path_prefix = 'results/' + (f'{args["output_dir_prefix"]}/' if args['output_dir_prefix'] else '')\
-        + (f"domain{args['training_domain_index']}"
-           if 'training_domain_index' in args and args['training_domain_index'] >= 0 else '')
-                             # + model_name.replace("/", "-")
+def get_output_dir(model_name, args, map_label=None):
+    model_save_path_prefix = '/'.join([(f'{args["output_dir_prefix"]}' if args['output_dir_prefix'] else ''),
+                                       (f"domain{args['training_domain_index']}"
+                                        if 'training_domain_index' in args and args['training_domain_index'] >= 0
+                                        else '')])
+    # + model_name.replace("/", "-")
+    model_save_path_prefix = model_save_path_prefix if model_save_path_prefix.startswith(RESULTS_DIR) else (
+                RESULTS_DIR + model_save_path_prefix)
     if not map_label:
         return model_save_path_prefix
     return model_save_path_prefix + \
@@ -91,10 +98,12 @@ def main():
     faulthandler.register(signal.SIGUSR1.value)
 
     args = parse_args()
+
+    assert args['lang'] in ['english', 'italian', None]
     
     model_name = args['model_name_or_path']
     train_batch_size = args['train_batch_size']  # The larger you select this, the better the results (usually)
-    max_seq_length = 75
+    max_seq_length = args['max_seq_length']
     num_epochs = args['num_train_epochs']
 
     data_path = (Path.home() / "data/e-delib/deliberatorium/maps" if args['local'] else
@@ -105,13 +114,13 @@ def main():
     
     if args['eval_not_trained']:
         logging.info('eval all arguments as not part of training data')
-        save_path = get_model_save_path(args['eval_model_name_or_path'], args)
-        wandb.init(project='argument-maps', name=save_path,
+        output_dir = get_output_dir(args['eval_model_name_or_path'], args)
+        wandb.init(project='argument-maps', name=output_dir,
                    # to fix "Error communicating with wandb process"
                    # see https://docs.wandb.ai/guides/track/launch#init-start-error
                    settings=wandb.Settings(start_method="fork"))
         wandb.config.update(args)
-        eval(save_path, args, argument_maps)
+        eval(output_dir, args, argument_maps)
         exit()
 
     # prepare samples
@@ -140,7 +149,7 @@ def main():
     for i, argument_map_label in enumerate(maps_samples.keys()):
         if args['argument_map'] and args['argument_map'] not in str(maps[i]):
             continue
-        model_save_path = get_model_save_path(model_name, args, argument_map_label)
+        model_save_path = get_output_dir(model_name, args, argument_map_label)
         logging.info(f'{model_save_path=}')
         logging.getLogger().handlers[0].flush()
 
@@ -199,9 +208,9 @@ def main():
 def eval(output_dir, args, argument_maps, training_map_index=-1):
     model = SentenceTransformer(args['eval_model_name_or_path'] if args['eval_model_name_or_path'] else
                                 output_dir)
-    results_path = Path(output_dir + '-results')
+    results_path = Path(output_dir + '/results')
     results_path.mkdir(exist_ok=True, parents=True)
-    encoder_mulitlingual = MapEncoder(max_seq_len=128,
+    encoder_mulitlingual = MapEncoder(max_seq_len=args['max_seq_length'],
                                       sbert_model_identifier=None,
                                       model=model,
                                       normalize_embeddings=True, use_descriptions=args['use_descriptions'])
@@ -209,7 +218,7 @@ def eval(output_dir, args, argument_maps, training_map_index=-1):
         train_eval = ((args['train_on_one_map'] and training_map_index == j) or
                       (not args['train_on_one_map'] and training_map_index != j)
                       and training_map_index >= 0)
-        results = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
+        results, _ = evaluate_map(encoder_mulitlingual, eval_argument_map, {"issue", "idea"})
         (results_path / f'{eval_argument_map.label}{"-train" if train_eval else ""}.json'). \
             write_text(json.dumps(results))
         wandb.log({eval_argument_map.label: results})

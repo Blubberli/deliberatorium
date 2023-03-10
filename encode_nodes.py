@@ -2,6 +2,8 @@ from sentence_transformers import SentenceTransformer
 import torch
 import pickle
 
+import templates
+
 
 class MapEncoder:
     """
@@ -10,7 +12,8 @@ class MapEncoder:
     specific argument map.
     """
 
-    def __init__(self, sbert_model_identifier, max_seq_len, use_descriptions=False, normalize_embeddings=False,
+    def __init__(self, sbert_model_identifier, max_seq_len, use_descriptions=False, use_templates=False,
+                 normalize_embeddings=False,
                  model=None):
         """
 
@@ -22,6 +25,7 @@ class MapEncoder:
         can be used to compute similarity. Default is false.
         """
         self.use_descriptions = use_descriptions
+        self.use_templates = use_templates
         self.device = self.get_device()
         self.sbertModel = model if model else SentenceTransformer(sbert_model_identifier, device=self.device)
         self.max_len = max_seq_len
@@ -46,7 +50,7 @@ class MapEncoder:
         :param path: [str] the location of the argument map to be encoded
         :return: a dictionary with embddings, corresponding sentences and corresponding IDs
         """
-        nodes = argument_map.all_children
+        nodes = argument_map.all_nodes
         sentences = [node.name for node in nodes]
         unique_ids = [node.id for node in nodes]
         if self.use_descriptions:
@@ -55,16 +59,28 @@ class MapEncoder:
                 sentences[i] + " : " + descriptions[i] if (descriptions[i] != '' and descriptions[i] != None) else
                 sentences[i] for i in
                 range(len(sentences))]
+
+        extra_embeddings = {}
+        if self.use_templates:
+            extra_embeddings['parent'] = self.sbertModel.encode(
+                [templates.format_primary(x, 'parent', True) for x in sentences],
+                show_progress_bar=True,
+                normalize_embeddings=self.normalize_embeddings)
+            sentences = [templates.format_primary(x, 'child', True) for x in sentences]
+
         embeddings = self.sbertModel.encode(sentences, show_progress_bar=True,
-                                             normalize_embeddings=self.normalize_embeddings)
+                                            normalize_embeddings=self.normalize_embeddings)
         for i in range(len(nodes)):
             nodes[i].add_embedding(embeddings[i])
+        if self.use_templates:
+            for i in range(len(nodes)):
+                nodes[i].extra_embeddings['parent'] = extra_embeddings['parent'][i]
         return {"embeddings": embeddings, "sentences": sentences, "ID": unique_ids}
 
     def add_stored_embeddings(self, argument_map, path_to_pckl):
         """Given a path of pregenerated embeddings, add"""
         data = self.load_embeddings(path_to_pckl=path_to_pckl)
-        nodes = argument_map.all_children
+        nodes = argument_map.all_nodes
         for node in nodes:
             id = node.id
             embedding = data[id]

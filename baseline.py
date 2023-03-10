@@ -1,36 +1,17 @@
+import logging
+
 import os
 from pathlib import Path
 
 from encode_nodes import MapEncoder
 from argumentMap import KialoMap, DeliberatoriumMap
-from evaluation import Evaluation
+from eval_util import evaluate_map
+from sentence_transformers import LoggingHandler
 
-
-def evaluate_map(encoder_mulitlingual, argument_map, node_types, max_candidates=0):
-    results = {}
-    print('eval', argument_map.name)
-    encoder_mulitlingual.encode_argument_map(argument_map)
-    print("default setting: all nodes are evaluated, all nodes are considered as candidates")
-    results['all'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True, max_candidates=max_candidates))
-    print("only check for leaf nodes")
-    results['only_leafs'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
-                                                max_candidates=max_candidates))
-    print("only leaf nodes and only issues and ideas as parents")
-    results['only_leafs_limited_types'] = eval_one(Evaluation(argument_map=argument_map, only_leafs=True,
-                                                              candidate_node_types=node_types,
-                                                              max_candidates=max_candidates))
-    return results
-
-
-def eval_one(evaluation: Evaluation):
-    mrr = evaluation.mean_reciprocal_rank(evaluation.ranks)
-    p5 = evaluation.precision_at_rank(evaluation.ranks, 5)
-    p1 = evaluation.precision_at_rank(evaluation.ranks, 1)
-    # print(eval.ranks)
-    print("child nodes: %d candidates :%d MRR: %.2f p@5: %.2f p@1: %.2f" % (
-        len(evaluation.child_nodes), len(evaluation.candidate_nodes), mrr, p5, p1))
-    return {'mrr': mrr, 'p5': p5, 'p1': p1}
-
+logging.basicConfig(format='%(asctime)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    level=logging.INFO,
+                    handlers=[LoggingHandler()])
 
 
 def deliberatorium_baseline():

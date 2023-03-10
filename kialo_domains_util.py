@@ -1,6 +1,5 @@
 import itertools
 from collections import defaultdict, Counter
-
 import pandas as pd
 
 
@@ -9,7 +8,7 @@ def get_map2topics(path_kialo2topics):
     topics = pd.read_csv(path_kialo2topics, sep="\t")
     topics.dropna(inplace=True)
     topics["topic_tags"] = [[w.strip().lower() for w in el.split(",")] for el in topics.topics.values]
-    return dict(zip(topics.name, topics.topic_tags))
+    return dict(zip(topics.MapID, topics.topic_tags))
 
 
 def get_subtopic_to_parent(maintopics):
@@ -23,7 +22,6 @@ def get_subtopic_to_parent(maintopics):
         main2subtopic[maintopic] = subtopics
         for subtopic in subtopics:
             sutop2maintop[subtopic] = maintopic
-            sutop2maintop[maintopic] = maintopic
     return sutop2maintop, main2subtopic
 
 
@@ -71,10 +69,11 @@ def get_unique_label(maps2maintopics):
 
 def get_maps2uniquetopic(path_kialo2topics, maintopics):
     maps2topics = get_map2topics(path_kialo2topics)
-    print(len(maps2topics))
+    print(f'{len(maps2topics)} maps have tags')
     sub2maintopic, main2subtopic = get_subtopic_to_parent(maintopics)
     maps2maintopic, left_maps = get_map2main_topic(maps2topics, sub2maintopic)
-    print("%d of the maps  have topic tag(s)" % len(maps2maintopic))
-    print(maps2maintopic)
+    print("%d maps have topic tag(s)" % len(maps2maintopic))
+    # print(maps2maintopic)
     map2unique = get_unique_label(maps2maintopic)
     return map2unique, (maps2topics, sub2maintopic, main2subtopic)
+
